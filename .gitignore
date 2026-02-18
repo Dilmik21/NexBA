@@ -1,0 +1,15 @@
+# Dependencies (We don't upload these, they are too big)
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Security (NEVER upload these!)
+.env
+server/.env
+
+# Build outputs
+dist/
+build/
+
+# System files
+.DS_Store

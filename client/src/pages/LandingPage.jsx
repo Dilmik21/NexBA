@@ -9,39 +9,40 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white font-sans text-navy overflow-x-hidden">
       
-      {/* 1. TOP NAVBAR */}
-      <nav className="container mx-auto px-6 py-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center transition-transform hover:scale-105 duration-300">
-          <img 
-            src={logoDark} 
-            alt="NexBA Logo" 
-            className="h-8 md:h-10 w-auto object-contain" 
-          />
-        </Link>
-        
-        <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-gray-600">
-          <Link to="/features" className="hover:text-primary transition-colors">Features</Link>
-          <Link to="/solutions" className="hover:text-primary transition-colors">Solutions</Link>
-          <Link to="/pricing" className="hover:text-primary transition-colors">Pricing</Link>
-          <Link to="/contact" className="hover:text-primary transition-colors">Contact</Link>
-        </div>
-
-        <div className="flex items-center space-x-4">
-          <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-primary transition-colors">
-            Log In
+      {/* 1. TOP NAVBAR (Changed to FIXED to guarantee it stays at the top) */}
+      <header className="fixed top-0 left-0 right-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
+        <nav className="container mx-auto px-6 py-4 flex items-center justify-between">
+          <Link to="/" className="flex items-center transition-transform hover:scale-105 duration-300">
+            <img 
+              src={logoDark} 
+              alt="NexBA Logo" 
+              className="h-8 md:h-10 w-auto object-contain" 
+            />
           </Link>
-          <Link to="/register" className="bg-primary text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-blue-700 transition-shadow shadow-md hover:shadow-lg">
-            Get Started
-          </Link>
-        </div>
-      </nav>
+          
+          <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-gray-600">
+            <Link to="/features" className="hover:text-primary transition-colors">Features</Link>
+            <Link to="/solutions" className="hover:text-primary transition-colors">Solutions</Link>
+            <Link to="/pricing" className="hover:text-primary transition-colors">Pricing</Link>
+            <Link to="/contact" className="hover:text-primary transition-colors">Contact</Link>
+          </div>
 
-      {/* 2. HERO SECTION */}
-      <div className="container mx-auto px-6 py-16 md:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <div className="flex items-center space-x-4">
+            <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-primary transition-colors">
+              Log In
+            </Link>
+            <Link to="/register" className="bg-primary text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-blue-700 transition-shadow shadow-md hover:shadow-lg">
+              Get Started
+            </Link>
+          </div>
+        </nav>
+      </header>
+
+      {/* 2. HERO SECTION (Added pt-32 to push it down below the fixed navbar) */}
+      <div className="container mx-auto px-6 pt-32 pb-16 md:pt-40 md:pb-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
         
         {/* Left Side: Text & Buttons */}
         <div className="space-y-8 z-10">
-          {/* UPDATED: AI Sparkles Icon */}
           <div className="inline-flex items-center space-x-2 bg-blue-100 text-primary px-4 py-2 rounded-full text-sm font-semibold">
             <Sparkles className="w-4 h-4" />
             <span>Intelligent Requirement Management and Collaboration System</span>
@@ -84,10 +85,8 @@ export default function LandingPage() {
         {/* Right Side: Floating Cards */}
         <div className="relative h-[450px] lg:h-[550px] w-full hidden md:block">
           
-          {/* Floating Card 1: Requirement */}
           <div className="absolute top-10 left-16 bg-white p-5 rounded-2xl shadow-xl border border-gray-100 w-72 animate-float z-20">
             <div className="flex items-center space-x-3 mb-3">
-              {/* UPDATED: Document FileText Icon */}
               <div className="bg-blue-100 p-2 rounded-lg"><FileText className="w-5 h-5 text-primary" /></div>
               <div>
                 <p className="text-xs text-gray-500 font-semibold">REQ-241</p>
@@ -101,7 +100,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Floating Card 2: Chat / AI Analysis */}
           <div className="absolute top-36 right-8 bg-white p-5 rounded-2xl shadow-xl border border-gray-100 w-80 animate-float-delayed z-30">
             <div className="flex items-center space-x-3 mb-3">
               <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shadow-inner">JC</div>
@@ -122,7 +120,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Floating Card 3: Verification */}
           <div className="absolute bottom-20 left-28 bg-white p-5 rounded-2xl shadow-xl border border-gray-100 w-72 animate-float-fast z-40">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-2">
@@ -137,7 +134,6 @@ export default function LandingPage() {
             <p className="text-right text-xs font-bold mt-1 text-gray-500">82%</p>
           </div>
           
-          {/* Decorative background blob */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[28rem] h-[28rem] bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
         </div>
       </div>

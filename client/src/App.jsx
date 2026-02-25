@@ -1,12 +1,16 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
 
+// Components
+import ProtectedRoute from "./components/ProtectedRoute"; 
+
+// Pages (Matching your screenshot exactly!)
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
-import Dashboard from "./pages/Dashboard"; // Our new controller
+import Dashboard from "./pages/Dashboard"; 
+import ClientOverview from "./pages/Client/ClientOverview";
 
 function App() {
   return (
@@ -18,7 +22,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           
-          {/* PROTECTED ROUTE: Only logged-in users can enter here */}
+          {/* THE TRAFFIC COP: Sorts users upon login */}
           <Route 
             path="/dashboard" 
             element={
@@ -27,6 +31,20 @@ function App() {
               </ProtectedRoute>
             } 
           />
+
+          {/* THE CLIENT ROUTES */}
+          <Route 
+            path="/client/overview" 
+            element={
+              <ProtectedRoute>
+                <ClientOverview />
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* We will add this next! */}
+          {/* <Route path="/client/requests" element={<ProtectedRoute><MyRequests /></ProtectedRoute>} /> */}
+
         </Routes>
       </AuthProvider>
     </Router>

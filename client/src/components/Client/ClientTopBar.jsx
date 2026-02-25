@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Search, Bell, ChevronDown, User, LogOut, Loader2, X } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
-import logoDark from '../assets/logo-dark.png';
+import { useAuth } from "../../contexts/AuthContext";
+import logoDark from '../../assets/logo-dark.png';
 
 export default function ClientTopBar() {
   const { userData, logout } = useAuth();

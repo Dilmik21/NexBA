@@ -1,7 +1,7 @@
 import { useAuth } from "../contexts/AuthContext";
-import ClientDashboard from "./dashboards/ClientDashboard";
-import BADashboard from "./dashboards/BADashboard";
-import DeveloperDashboard from "./dashboards/DeveloperDashboard";
+import ClientDashboard from "./Client/ClientOverview";
+import BADashboard from "./BA/BADashboard";
+import DeveloperDashboard from "./Developer/DeveloperDashboard";
 import { Loader2 } from "lucide-react";
 
 export default function Dashboard() {

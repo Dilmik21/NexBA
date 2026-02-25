@@ -1,12 +1,12 @@
 import { useState } from "react"; // <-- Import useState
-import ClientTopBar from "../../components/ClientTopBar";
-import ClientSidebar from "../../components/ClientSidebar";
-import ClientOverviewCards from "../../components/ClientOverviewCards";
-import ClientProjectProgress from "../../components/ClientProjectProgress";
-import ClientChangeRequests from "../../components/ClientChangeRequests";
-import ClientActionItems from "../../components/ClientActionItems";
-import ClientRecentActivity from "../../components/ClientRecentActivity";
-import NewProjectModal from "../../components/NewProjectModal"; // <-- 1. Import the Modal
+import ClientTopBar from "../../components/Client/ClientTopBar";
+import ClientSidebar from "../../components/Client/ClientSidebar";
+import ClientOverviewCards from "../../components/Client/ClientOverviewCards";
+import ClientProjectProgress from "../../components/Client/ClientProjectProgress";
+import ClientChangeRequests from "../../components/Client/ClientChangeRequests";
+import ClientActionItems from "../../components/Client/ClientActionItems";
+import ClientRecentActivity from "../../components/Client/ClientRecentActivity";
+import NewProjectModal from "../../components/Client/NewProjectModal"; // <-- 1. Import the Modal
 import { useAuth } from "../../contexts/AuthContext";
 import { Plus } from "lucide-react";
 

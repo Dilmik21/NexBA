@@ -6,6 +6,8 @@ server/node_modules/
 # Security (NEVER upload these!)
 .env
 server/.env
+serviceAccountKey.json
+server/serviceAccountKey.json
 
 # Build outputs
 dist/

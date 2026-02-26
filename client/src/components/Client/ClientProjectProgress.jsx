@@ -29,8 +29,13 @@ export default function ClientProjectProgress() {
         return { badgeBg: "bg-blue-100", badgeText: "text-blue-600", barColor: "bg-blue-600" };
       case "UAT":
         return { badgeBg: "bg-purple-100", badgeText: "text-purple-600", barColor: "bg-green-600" };
+      
+      // UPDATED: Catch the new standard 'Analysis', AND any old test data!
       case "Analysis":
+      case "In Analysis":
+      case "Pending BA Review":
         return { badgeBg: "bg-orange-100", badgeText: "text-orange-600", barColor: "bg-orange-400" };
+      
       default:
         return { badgeBg: "bg-gray-100", badgeText: "text-gray-600", barColor: "bg-gray-500" };
     }
@@ -62,7 +67,8 @@ export default function ClientProjectProgress() {
               {/* Middle: Stage Badge */}
               <div className="w-28 flex-shrink-0">
                 <span className={`text-[10px] font-bold px-3 py-1 rounded w-full block text-center ${styles.badgeBg} ${styles.badgeText}`}>
-                  {req.stage}
+                  {/* UPDATED: Force the UI to always display "Analysis" for old test data */}
+                  {req.stage === "Pending BA Review" || req.stage === "In Analysis" ? "Analysis" : req.stage}
                 </span>
               </div>
 

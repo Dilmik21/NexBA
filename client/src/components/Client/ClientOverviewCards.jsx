@@ -43,7 +43,8 @@ export default function ClientOverviewCards() {
       bgColor: "bg-green-50"
     },
     {
-      title: "In Analysis",
+      // UPDATED: Changed from "In Analysis" to exactly "Analysis"
+      title: "Analysis",
       value: stats.inAnalysis,
       icon: Clock,
       color: "text-yellow-500",

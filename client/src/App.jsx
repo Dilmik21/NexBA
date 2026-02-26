@@ -11,6 +11,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard"; 
 import ClientOverview from "./pages/Client/ClientOverview";
+import MyRequests from "./pages/Client/MyRequests";
 
 function App() {
   return (
@@ -42,8 +43,15 @@ function App() {
             } 
           />
           
-          {/* We will add this next! */}
-          {/* <Route path="/client/requests" element={<ProtectedRoute><MyRequests /></ProtectedRoute>} /> */}
+          {/* NEW: The My Requests Page */}
+          <Route 
+            path="/client/requests" 
+            element={
+              <ProtectedRoute>
+                <MyRequests />
+              </ProtectedRoute>
+            } 
+          />
 
         </Routes>
       </AuthProvider>

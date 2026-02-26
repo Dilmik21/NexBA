@@ -34,13 +34,14 @@ export default function ClientSidebar() {
     fetchStats();
   }, []);
 
+  // UPDATED PATHS: Changed from /dashboard to /client to match our new App.jsx routing
   const menuItems = [
-    { name: "Overview", path: "/dashboard", icon: LayoutDashboard },
-    { name: "My Requests", path: "/dashboard/requests", icon: FileText },
-    { name: "Clarifications", path: "/dashboard/clarifications", icon: MessageSquare, badge: stats.pendingClarifications },
-    { name: "Approvals", path: "/dashboard/approvals", icon: CheckSquare, badge: stats.pendingApprovals },
-    { name: "Messages", path: "/dashboard/messages", icon: MessageCircle, badge: stats.unreadMessages },
-    { name: "Archive", path: "/dashboard/archive", icon: Archive },
+    { name: "Overview", path: "/client/overview", icon: LayoutDashboard },
+    { name: "My Requests", path: "/client/requests", icon: FileText },
+    { name: "Clarifications", path: "/client/clarifications", icon: MessageSquare, badge: stats.pendingClarifications },
+    { name: "Approvals", path: "/client/approvals", icon: CheckSquare, badge: stats.pendingApprovals },
+    { name: "Messages", path: "/client/messages", icon: MessageCircle, badge: stats.unreadMessages },
+    { name: "Archive", path: "/client/archive", icon: Archive },
   ];
 
   return (
@@ -89,17 +90,17 @@ export default function ClientSidebar() {
 
       <div className="p-4 border-t border-gray-50">
         <Link
-          to="/dashboard/settings"
+          to="/client/settings"
           // UPDATED HOVER CLASSES for Settings as well
           className={`flex items-center px-4 py-3 rounded-2xl transition-all duration-200 group ${
-            location.pathname === "/dashboard/settings" 
+            location.pathname === "/client/settings" 
               ? "bg-blue-50 text-primary font-semibold" 
               : "text-gray-500 hover:bg-blue-50 hover:text-primary font-medium"
           }`}
         >
           {/* UPDATED ICON HOVER for Settings */}
           <Settings className={`w-5 h-5 mr-4 transition-colors ${
-            location.pathname === "/dashboard/settings" ? "text-primary" : "text-gray-400 group-hover:text-primary"
+            location.pathname === "/client/settings" ? "text-primary" : "text-gray-400 group-hover:text-primary"
           }`} />
           <span className="text-sm">Settings</span>
         </Link>

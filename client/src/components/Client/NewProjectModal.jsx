@@ -1,17 +1,18 @@
 import { useState, useRef } from "react";
-import { X, FileText, Folder, Sparkles, ArrowRight, ArrowLeft, Rocket, Loader2, UploadCloud, File as FileIcon } from "lucide-react";
+import { X, FileText, Folder, Sparkles, ArrowRight, ArrowLeft, Rocket, Loader2, UploadCloud, File as FileIcon, AlertCircle } from "lucide-react";
 
 export default function NewProjectModal({ isOpen, onClose }) {
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAIPopup, setShowAIPopup] = useState(false);
+  
+  // NEW: State to hold the AI rejection error
+  const [aiError, setAiError] = useState(null);
 
-  // NEW: State to hold the uploaded file details
   const [uploadedFile, setUploadedFile] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Form State
   const [formData, setFormData] = useState({
     title: "",
     type: "", 
@@ -21,29 +22,24 @@ export default function NewProjectModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  // --- VALIDATION LOGIC ---
   const isStep1Valid = formData.title.trim() !== "" && formData.type !== "";
-  // NEW: Step 2 is valid if text is typed OR a file is uploaded
   const isStep2Valid = formData.type === 'text' 
     ? formData.description.trim() !== "" 
     : uploadedFile !== null; 
   
   const canContinue = (step === 1 && isStep1Valid) || (step === 2 && isStep2Valid);
 
-  // --- FILE UPLOAD LOGIC ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Calculate file size in MB
       const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
-      // Get file extension (PDF, DOCX, etc.)
       const extension = file.name.split('.').pop().toUpperCase();
       
       setUploadedFile({
         name: file.name,
         size: `${sizeInMB} MB`,
         type: extension,
-        rawFile: file // Kept here for when you connect Firebase Storage later!
+        rawFile: file 
       });
     }
   };
@@ -51,6 +47,8 @@ export default function NewProjectModal({ isOpen, onClose }) {
   const handleAIStructure = async () => {
     if (!formData.description) return;
     setIsGenerating(true);
+    setAiError(null); // Clear any previous errors
+
     try {
       const response = await fetch("http://localhost:5000/api/ai/structure-text", {
         method: "POST",
@@ -58,12 +56,22 @@ export default function NewProjectModal({ isOpen, onClose }) {
         body: JSON.stringify({ rawText: formData.description })
       });
       const data = await response.json();
+      
       if (data.success) {
+        // AI succeeded!
         setFormData({ ...formData, description: data.structuredText });
         setShowAIPopup(false);
+      } else if (data.isInvalidInput) {
+        // AI Gatekeeper rejected it! Show the error.
+        setAiError(data.error);
+        setShowAIPopup(false);
+      } else {
+        // Standard backend error fallback
+        setAiError("Something went wrong connecting to the AI. Please try again.");
       }
     } catch (error) {
       console.error("AI failed:", error);
+      setAiError("Network error. Please check your connection.");
     } finally {
       setIsGenerating(false);
     }
@@ -72,7 +80,6 @@ export default function NewProjectModal({ isOpen, onClose }) {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
-    // Prepare payload. If it's a document, we send the file metadata instead of the description.
     const finalPayload = {
       ...formData,
       fileName: uploadedFile ? uploadedFile.name : null,
@@ -87,11 +94,12 @@ export default function NewProjectModal({ isOpen, onClose }) {
       });
       const data = await response.json();
       if (data.success) {
-        // Reset everything
+        // Reset everything on success
         setStep(1);
         setFormData({ title: "", type: "", description: "", priority: "Medium" });
         setUploadedFile(null);
         setShowAIPopup(false);
+        setAiError(null);
         onClose();
       }
     } catch (error) {
@@ -193,19 +201,37 @@ export default function NewProjectModal({ isOpen, onClose }) {
           {/* STEP 2: Text Description Path */}
           {step === 2 && formData.type === 'text' && (
             <div className="h-full flex flex-col relative animate-in fade-in slide-in-from-right-4 duration-500">
+              
+              {/* THE NEW AI ERROR BOX */}
+              {aiError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start space-x-3 animate-in slide-in-from-top-2">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-bold text-red-800">Invalid Input Detected</h4>
+                    <p className="text-sm text-red-600 mt-1">{aiError}</p>
+                  </div>
+                </div>
+              )}
+
               <textarea 
-                className="w-full h-full p-6 bg-gray-50 rounded-2xl resize-none outline-none focus:ring-2 focus:ring-primary/20 transition-all text-navy"
+                className={`w-full h-full p-6 bg-gray-50 rounded-2xl resize-none outline-none focus:ring-2 focus:ring-primary/20 transition-all text-navy ${aiError ? 'border-2 border-red-200' : ''}`}
                 placeholder="Describe the feature in detail. Who is it for? What should it do?"
                 value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, description: e.target.value});
+                  if (aiError) setAiError(null); // Clear error as soon as they start typing again
+                }}
               />
               
-              <button 
-                onClick={() => setShowAIPopup(!showAIPopup)}
-                className="absolute top-4 right-4 bg-purple-100 text-purple-600 p-3 rounded-xl hover:bg-purple-200 transition-colors shadow-sm flex items-center justify-center"
-              >
-                <Sparkles className="w-5 h-5" />
-              </button>
+              {/* Only show the Sparkles button if there isn't an active error taking up space */}
+              {!aiError && (
+                <button 
+                  onClick={() => setShowAIPopup(!showAIPopup)}
+                  className="absolute top-4 right-4 bg-purple-100 text-purple-600 p-3 rounded-xl hover:bg-purple-200 transition-colors shadow-sm flex items-center justify-center"
+                >
+                  <Sparkles className="w-5 h-5" />
+                </button>
+              )}
 
               {showAIPopup && (
                 <div className="absolute top-16 right-4 w-72 bg-white rounded-2xl shadow-xl border border-purple-100 p-5 z-10 animate-in fade-in zoom-in-95 duration-200">
@@ -233,11 +259,9 @@ export default function NewProjectModal({ isOpen, onClose }) {
             </div>
           )}
 
-          {/* NEW STEP 2: Document Upload Path */}
+          {/* STEP 2: Document Upload Path */}
           {step === 2 && formData.type === 'document' && (
             <div className="h-full flex flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-500">
-              
-              {/* Hidden file input triggered by the box below */}
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -245,9 +269,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
                 className="hidden" 
                 accept=".pdf,.docx,.txt" 
               />
-
               {!uploadedFile ? (
-                // State 1: Empty Dropzone
                 <div 
                   onClick={() => fileInputRef.current.click()}
                   className="border-2 border-dashed border-gray-200 rounded-3xl h-[300px] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-primary transition-colors group"
@@ -259,7 +281,6 @@ export default function NewProjectModal({ isOpen, onClose }) {
                   <p className="text-gray-400 text-sm mt-1">Supports PDF, DOCX, TXT</p>
                 </div>
               ) : (
-                // State 2: Uploaded File Card
                 <div className="border border-gray-100 rounded-2xl p-6 flex items-center justify-between bg-white shadow-sm mt-8">
                   <div className="flex items-center space-x-6">
                     <div className="w-14 h-14 bg-red-50 rounded-xl flex items-center justify-center text-red-500">
@@ -293,7 +314,6 @@ export default function NewProjectModal({ isOpen, onClose }) {
                   <p className="font-bold text-navy text-lg">{formData.title}</p>
                 </div>
                 
-                {/* DYNAMIC TYPE DISPLAY */}
                 <div className={`${formData.type === 'text' ? 'mb-4 pb-4 border-b border-gray-200' : ''}`}>
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Type</p>
                   
@@ -308,7 +328,6 @@ export default function NewProjectModal({ isOpen, onClose }) {
                   )}
                 </div>
 
-                {/* ONLY SHOW DESCRIPTION IF IT'S TEXT */}
                 {formData.type === 'text' && (
                   <div>
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Description Preview</p>

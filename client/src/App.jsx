@@ -4,7 +4,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 // Components
 import ProtectedRoute from "./components/ProtectedRoute"; 
 
-// Pages (Matching your screenshot exactly!)
+// Pages 
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -13,8 +13,9 @@ import Dashboard from "./pages/Dashboard";
 import ClientOverview from "./pages/Client/ClientOverview";
 import MyRequests from "./pages/Client/MyRequests";
 import ClientClarifications from "./pages/Client/ClientClarifications";
-// ADDED: Import the new Approvals page
 import ClientApprovals from "./pages/Client/ClientApprovals";
+// ADDED: Import the new Messages page
+import ClientMessages from "./pages/Client/ClientMessages";
 
 function App() {
   return (
@@ -26,7 +27,6 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           
-          {/* THE TRAFFIC COP: Sorts users upon login */}
           <Route 
             path="/dashboard" 
             element={
@@ -36,7 +36,6 @@ function App() {
             } 
           />
 
-          {/* THE CLIENT ROUTES */}
           <Route 
             path="/client/overview" 
             element={
@@ -46,7 +45,6 @@ function App() {
             } 
           />
           
-          {/* The My Requests Page */}
           <Route 
             path="/client/requests" 
             element={
@@ -56,7 +54,6 @@ function App() {
             } 
           />
 
-          {/* The Clarifications Page */}
           <Route 
             path="/client/clarifications" 
             element={
@@ -66,12 +63,21 @@ function App() {
             } 
           />
 
-          {/* NEW: The Approvals Page */}
           <Route 
             path="/client/approvals" 
             element={
               <ProtectedRoute>
                 <ClientApprovals />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: The Messages Page */}
+          <Route 
+            path="/client/messages" 
+            element={
+              <ProtectedRoute>
+                <ClientMessages />
               </ProtectedRoute>
             } 
           />

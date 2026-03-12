@@ -12,7 +12,6 @@ const submitProject = async (req, res) => {
     const newRequirement = {
       ...projectData,
       reqId: customReqId,
-      // REVERTED: Set back to "Pending BA Review"
       status: "Pending BA Review", 
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
       progress: 0
@@ -21,7 +20,7 @@ const submitProject = async (req, res) => {
     const docRef = await db.collection('requirements').add(newRequirement);
 
     await db.collection('activity_logs').add({
-      user: "Client", // You can pass the actual user name from frontend later
+      user: "Client", 
       action: `Launched new request: ${projectData.title}`,
       time: admin.firestore.FieldValue.serverTimestamp(),
       dotColor: "bg-blue-500", 
@@ -45,7 +44,6 @@ const getOverviewStats = async (req, res) => {
       const data = doc.data();
       stats.totalActive++; 
       if (data.status === "Pending Approval") stats.pendingApprovals++;
-      // REVERTED: Checking for "Pending BA Review" again
       if (data.status === "Pending BA Review" || data.status === "In Analysis") stats.inAnalysis++;
       if (data.status === "Clarification Needed") stats.clarificationsNeeded++;
     });
@@ -175,8 +173,6 @@ const getAllRequests = async (req, res) => {
     
     snapshot.forEach(doc => {
       const data = doc.data();
-      
-      // Safely format the Firebase Timestamp into YYYY-MM-DD
       let formattedDate = "Pending";
       if (data.submittedAt) {
         const dateObj = data.submittedAt.toDate();
@@ -191,9 +187,9 @@ const getAllRequests = async (req, res) => {
         stage: data.status,
         priority: data.priority || 'Medium',
         rawDbId: doc.id,
-        // Send these to the frontend for the popup!
         description: data.description || "No description provided.",
-        fileName: data.fileName || "No file attached"
+        fileName: data.fileName || "No file attached",
+        baName: data.baName || "Bhashi Fernando" // Adding BA Name for the UI
       });
     });
 
@@ -217,11 +213,10 @@ const getClarifications = async (req, res) => {
         reqId: data.reqId || "REQ-0000",
         title: data.title || "Untitled",
         baName: data.baName || "Bhashi Fernando",
-        // Format timestamp or fallback to a string
         createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
         priority: data.priority || "Medium",
-        source: data.source || "BA", // 'AI' or 'BA'
-        status: data.status || "Pending", // 'Pending' or 'Answered'
+        source: data.source || "BA",
+        status: data.status || "Pending",
         regarding: data.regarding || "No specific context provided.",
         question: data.question || "Please provide more details.",
         answer: data.answer || ""
@@ -248,23 +243,11 @@ const answerClarification = async (req, res) => {
       return res.status(404).json({ success: false, message: "Clarification not found" });
     }
 
-    // Update the clarification to answered
     await clarificationRef.update({
       answer: answer,
       status: "Answered",
       answeredAt: admin.firestore.FieldValue.serverTimestamp()
     });
-
-    // Optional: Update the main requirement status back to "Pending BA Review"
-    const reqId = doc.data().reqId;
-    if (reqId) {
-      const reqSnapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
-      if (!reqSnapshot.empty) {
-        await db.collection('requirements').doc(reqSnapshot.docs[0].id).update({
-          status: "Pending BA Review"
-        });
-      }
-    }
 
     res.json({ success: true, message: "Answer submitted successfully" });
   } catch (error) {
@@ -276,18 +259,14 @@ const answerClarification = async (req, res) => {
 // --- APPROVALS: GET ALL ---
 const getApprovals = async (req, res) => {
   try {
-    // Query Firestore for requirements explicitly marked as "Awaiting Review"
     const snapshot = await db.collection('requirements').where('status', '==', 'Awaiting Review').get();
     let approvals = [];
     
     snapshot.forEach(doc => {
       const data = doc.data();
-      
-      // Safely format the Firebase Timestamp into a readable string like in image_3.png
       let formattedDate = "Pending";
       if (data.submittedAt) {
         const dateObj = data.submittedAt.toDate();
-        // Generates format: "Jan 14, 2025"
         formattedDate = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
       }
 
@@ -297,10 +276,9 @@ const getApprovals = async (req, res) => {
         title: data.title || 'Untitled Feature',
         submittedBy: data.submittedBy || 'Naveen Dilhan',
         submittedAt: formattedDate,
-        // Assuming evidence and verification are completed before reaching this status
         evidenceSubmitted: data.evidenceSubmitted || true, 
         baVerified: data.baVerified || true, 
-        evidenceImage: data.evidenceImage || null, // A URL stored in Firebase Storage
+        evidenceImage: data.evidenceImage || null,
         commitLink: data.commitLink || 'github.com/nexba/core/commit/a3f8c21',
         description: data.description || 'No description provided.'
       });
@@ -317,28 +295,14 @@ const getApprovals = async (req, res) => {
 const approveRequirement = async (req, res) => {
   try {
     const { id } = req.params;
-
     const requirementRef = db.collection('requirements').doc(id);
     const doc = await requirementRef.get();
 
-    if (!doc.exists) {
-      return res.status(404).json({ success: false, message: "Requirement not found" });
-    }
+    if (!doc.exists) return res.status(404).json({ success: false, message: "Requirement not found" });
 
-    // Update the requirement status directly to "Approved"
     await requirementRef.update({
       status: "Approved",
       approvedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Add a success message to the activity logs
-    const data = doc.data();
-    await db.collection('activity_logs').add({
-      user: "Client", 
-      action: `Approved evidence for requirement: ${data.title}`,
-      time: admin.firestore.FieldValue.serverTimestamp(),
-      dotColor: "bg-green-500", // Success green dot
-      reqId: data.reqId
     });
 
     res.json({ success: true, message: "Requirement approved successfully" });
@@ -353,35 +317,76 @@ const requestChangeForRequirement = async (req, res) => {
   try {
     const { id } = req.params;
     const { changeType, changeDescription } = req.body;
-
     const requirementRef = db.collection('requirements').doc(id);
     const doc = await requirementRef.get();
 
-    if (!doc.exists) {
-      return res.status(404).json({ success: false, message: "Requirement not found" });
-    }
+    if (!doc.exists) return res.status(404).json({ success: false, message: "Requirement not found" });
 
-    // Update status to "Modification Requested" and store the reasons
     await requirementRef.update({
       status: "Modification Requested",
       changeRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastChangeType: changeType, // Storing "Bug Report" or "Scope Change"
+      lastChangeType: changeType,
       lastChangeDescription: changeDescription
-    });
-
-    // Add a warning message to the activity logs
-    const data = doc.data();
-    await db.collection('activity_logs').add({
-      user: "Client", 
-      action: `Requested ${changeType.toLowerCase()} for: ${data.title}`,
-      time: admin.firestore.FieldValue.serverTimestamp(),
-      dotColor: "bg-yellow-500", // Warning yellow dot
-      reqId: data.reqId
     });
 
     res.json({ success: true, message: "Change request submitted successfully" });
   } catch (error) {
     console.error("[Backend Error - requestChangeForRequirement]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- MESSAGES: GET ALL ---
+const getMessages = async (req, res) => {
+  try {
+    const snapshot = await db.collection('messages').orderBy('timestamp', 'asc').get();
+    let messages = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      
+      let formattedTime = "Just now";
+      if (data.timestamp) {
+        const dateObj = data.timestamp.toDate();
+        formattedTime = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      }
+
+      messages.push({
+        id: doc.id,
+        reqId: data.reqId || "GLOBAL", // Maps the message to a project
+        text: data.text || "",
+        fileName: data.fileName || null, // Handles attachments
+        sender: data.sender || "BA",
+        senderName: data.senderName || (data.sender === 'Client' ? "Dilmik Rasanjana" : "Bhashi Fernando"),
+        timestamp: formattedTime
+      });
+    });
+
+    res.json({ success: true, data: messages });
+  } catch (error) {
+    console.error("[Backend Error - getMessages]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- MESSAGES: SEND NEW MESSAGE ---
+const sendMessage = async (req, res) => {
+  try {
+    const { text, sender, senderName, reqId, fileName } = req.body;
+    
+    const newMessage = {
+      text: text || "",
+      reqId: reqId || "GLOBAL",
+      fileName: fileName || null, // Save file name if attached
+      sender: sender || "Client",
+      senderName: senderName || "Dilmik Rasanjana",
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    const docRef = await db.collection('messages').add(newMessage);
+    res.json({ success: true, id: docRef.id });
+  } catch (error) {
+    console.error("[Backend Error - sendMessage]:", error);
     res.status(500).json({ success: false });
   }
 };
@@ -399,5 +404,7 @@ module.exports = {
   answerClarification,
   getApprovals,
   approveRequirement,
-  requestChangeForRequirement
+  requestChangeForRequirement,
+  getMessages,
+  sendMessage
 };

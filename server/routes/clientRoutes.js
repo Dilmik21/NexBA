@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const clientController = require('../controllers/clientController');
 
-// All these routes will automatically have '/api/client' put in front of them by server.js
 router.post('/projects', clientController.submitProject);
 router.get('/overview-stats', clientController.getOverviewStats);
 router.get('/project-progress', clientController.getProjectProgress);
@@ -16,9 +15,13 @@ router.get('/requests', clientController.getAllRequests);
 router.get('/clarifications', clientController.getClarifications);
 router.post('/clarifications/:id/answer', clientController.answerClarification);
 
-// --- NEW APPROVAL ROUTES ---
+// --- APPROVAL ROUTES ---
 router.get('/approvals', clientController.getApprovals);
 router.post('/approvals/:id/approve', clientController.approveRequirement);
 router.post('/approvals/:id/request-change', clientController.requestChangeForRequirement);
+
+// --- NEW MESSAGE ROUTES ---
+router.get('/messages', clientController.getMessages);
+router.post('/messages', clientController.sendMessage);
 
 module.exports = router;

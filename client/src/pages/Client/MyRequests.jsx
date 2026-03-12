@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-// Added 'X' to the imports for the modal close button!
 import { Search, Filter, Plus, Eye, FileText, File as FileIcon, X } from "lucide-react";
 import ClientTopBar from "../../components/Client/ClientTopBar";
 import ClientSidebar from "../../components/Client/ClientSidebar";
@@ -37,8 +36,9 @@ export default function MyRequests() {
 
   const getStageStyle = (stage) => {
     switch (stage) {
-      // UPDATED: Removed 'Pending BA Review', kept only 'Analysis'
-      case "Analysis":
+      case "Pending BA Review":
+      case "Analysis": 
+      case "In Analysis":
         return "bg-orange-50 text-orange-600 ring-1 ring-orange-500/20";
       case "Development":
         return "bg-blue-50 text-blue-600 ring-1 ring-blue-500/20";
@@ -63,9 +63,19 @@ export default function MyRequests() {
   const filteredRequests = requests.filter(req => {
     const matchesSearch = req.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           req.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStage = filterStage === "All Stages" || req.stage === filterStage;
+    
+    // Ensure the filter works even if the DB has the old "Analysis" text
+    const displayStage = (req.stage === "Analysis" || req.stage === "In Analysis") ? "Pending BA Review" : req.stage;
+    const matchesStage = filterStage === "All Stages" || displayStage === filterStage;
+    
     return matchesSearch && matchesStage;
   });
+
+  // Helper to cleanly format the text on the UI
+  const getDisplayStageText = (stage) => {
+    if (stage === "Analysis" || stage === "In Analysis") return "Pending BA Review";
+    return stage;
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
@@ -86,10 +96,11 @@ export default function MyRequests() {
           <ClientSidebar />
         </div>
 
-        <div className="flex-1 pb-10">
+        {/* UPDATED: Added h-[calc(100vh-100px)] and flex flex-col to match other pages */}
+        <div className="flex-1 pb-10 flex flex-col h-[calc(100vh-100px)]">
           
           {/* Header */}
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex justify-between items-center mb-8 flex-shrink-0">
             <h1 className="text-2xl font-bold text-navy">My Requests</h1>
             <button 
               onClick={() => setIsModalOpen(true)}
@@ -100,7 +111,7 @@ export default function MyRequests() {
           </div>
 
           {/* Controls: Search & Filter */}
-          <div className="flex space-x-4 mb-6">
+          <div className="flex space-x-4 mb-6 flex-shrink-0">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input 
@@ -121,8 +132,7 @@ export default function MyRequests() {
                   className="bg-transparent outline-none text-navy font-semibold cursor-pointer appearance-none pr-4"
                 >
                   <option value="All Stages">All Stages</option>
-                  {/* UPDATED: Removed "Pending BA Review" option here */}
-                  <option value="Analysis">Analysis</option>
+                  <option value="Pending BA Review">Pending BA Review</option>
                   <option value="Development">Development</option>
                   <option value="UAT">UAT</option>
                   <option value="Live">Live</option>
@@ -131,65 +141,70 @@ export default function MyRequests() {
             </div>
           </div>
 
-          {/* Data Table */}
-          <div className="bg-white border border-gray-100 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50/50 border-b border-gray-100">
-                  <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">ID</th>
-                  <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Title</th>
-                  <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Submitted</th>
-                  <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Stage</th>
-                  <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Priority</th>
-                  <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan="6" className="text-center py-8 text-gray-500">Loading requests...</td>
-                  </tr>
-                ) : filteredRequests.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="text-center py-8 text-gray-500">No requests found.</td>
-                  </tr>
-                ) : (
-                  filteredRequests.map((req) => (
-                    <tr key={req.id} className="hover:bg-blue-50/30 transition-colors group">
-                      <td className="py-4 px-6 text-sm text-gray-400 font-bold">{req.id}</td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center space-x-3">
-                          <span className="font-bold text-navy text-sm">{req.title}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center space-x-1 ${req.type === 'document' ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-500'}`}>
-                            {req.type === 'document' ? 'File' : 'Text'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm text-gray-500 font-medium">{req.date}</td>
-                      <td className="py-4 px-6">
-                        <span className={`text-[11px] font-bold px-3 py-1 rounded-full ${getStageStyle(req.stage)}`}>
-                          {req.stage}
-                        </span>
-                      </td>
-                      <td className={`py-4 px-6 text-sm ${getPriorityColor(req.priority)}`}>
-                        {req.priority}
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        {/* THE BUTTON: Click this to open the modal! */}
-                        <button 
-                          onClick={() => setSelectedRequest(req)} 
-                          className="text-gray-400 hover:text-primary transition-colors p-2 rounded-xl hover:bg-blue-50"
-                        >
-                          <Eye className="w-5 h-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          {/* Data Table Container - UPDATED to handle scrolling */}
+          <div className="bg-white border border-gray-100 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col flex-1 min-h-0 overflow-hidden">
             
-            <div className="px-6 py-4 border-t border-gray-50 text-xs font-semibold text-gray-400 bg-gray-50/30">
+            {/* Scrollable Area */}
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full text-left border-collapse">
+                {/* UPDATED: Sticky Header so it stays at the top while scrolling */}
+                <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10 border-b border-gray-100">
+                  <tr>
+                    <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">ID</th>
+                    <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Title</th>
+                    <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Submitted</th>
+                    <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Stage</th>
+                    <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider">Priority</th>
+                    <th className="py-4 px-6 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-8 text-gray-500">Loading requests...</td>
+                    </tr>
+                  ) : filteredRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-8 text-gray-500">No requests found.</td>
+                    </tr>
+                  ) : (
+                    filteredRequests.map((req) => (
+                      <tr key={req.id} className="hover:bg-blue-50/30 transition-colors group">
+                        <td className="py-4 px-6 text-sm text-gray-400 font-bold">{req.id}</td>
+                        <td className="py-4 px-6">
+                          <div className="flex items-center space-x-3">
+                            <span className="font-bold text-navy text-sm">{req.title}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center space-x-1 ${req.type === 'document' ? 'bg-orange-50 text-orange-500' : 'bg-blue-50 text-blue-500'}`}>
+                              {req.type === 'document' ? 'File' : 'Text'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-sm text-gray-500 font-medium">{req.date}</td>
+                        <td className="py-4 px-6">
+                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full inline-block whitespace-nowrap ${getStageStyle(req.stage)}`}>
+                            {getDisplayStageText(req.stage)}
+                          </span>
+                        </td>
+                        <td className={`py-4 px-6 text-sm ${getPriorityColor(req.priority)}`}>
+                          {req.priority}
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <button 
+                            onClick={() => setSelectedRequest(req)} 
+                            className="text-gray-400 hover:text-primary transition-colors p-2 rounded-xl hover:bg-blue-50"
+                          >
+                            <Eye className="w-5 h-5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer attached to the bottom of the table container */}
+            <div className="px-6 py-4 border-t border-gray-50 text-xs font-semibold text-gray-400 bg-gray-50/30 flex-shrink-0">
               Showing {filteredRequests.length} of {requests.length} requirements
             </div>
           </div>
@@ -197,14 +212,11 @@ export default function MyRequests() {
         </div>
       </div>
 
-      {/* ========================================= */}
-      {/* THE NEW "VIEW DETAILS" MODAL */}
-      {/* ========================================= */}
+      {/* THE VIEW DETAILS MODAL */}
       {selectedRequest && (
         <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
             
-            {/* Modal Header */}
             <div className="px-8 py-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50 rounded-t-[2rem]">
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Requirement Details</p>
@@ -218,10 +230,8 @@ export default function MyRequests() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-8 overflow-y-auto">
               
-              {/* Top Stats Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">ID</p>
@@ -237,13 +247,13 @@ export default function MyRequests() {
                 </div>
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Stage</p>
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${getStageStyle(selectedRequest.stage)}`}>
-                    {selectedRequest.stage}
+                  {/* ADDED whitespace-nowrap and inline-block to fix the wrapping issue in the modal! */}
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-md inline-block whitespace-nowrap ${getStageStyle(selectedRequest.stage)}`}>
+                    {getDisplayStageText(selectedRequest.stage)}
                   </span>
                 </div>
               </div>
 
-              {/* Dynamic Content: Description OR File */}
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center">
                   {selectedRequest.type === 'document' ? <FileIcon className="w-4 h-4 mr-2"/> : <FileText className="w-4 h-4 mr-2"/>}

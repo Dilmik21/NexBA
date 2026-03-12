@@ -12,6 +12,9 @@ import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard"; 
 import ClientOverview from "./pages/Client/ClientOverview";
 import MyRequests from "./pages/Client/MyRequests";
+import ClientClarifications from "./pages/Client/ClientClarifications";
+// ADDED: Import the new Approvals page
+import ClientApprovals from "./pages/Client/ClientApprovals";
 
 function App() {
   return (
@@ -43,12 +46,32 @@ function App() {
             } 
           />
           
-          {/* NEW: The My Requests Page */}
+          {/* The My Requests Page */}
           <Route 
             path="/client/requests" 
             element={
               <ProtectedRoute>
                 <MyRequests />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* The Clarifications Page */}
+          <Route 
+            path="/client/clarifications" 
+            element={
+              <ProtectedRoute>
+                <ClientClarifications />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: The Approvals Page */}
+          <Route 
+            path="/client/approvals" 
+            element={
+              <ProtectedRoute>
+                <ClientApprovals />
               </ProtectedRoute>
             } 
           />

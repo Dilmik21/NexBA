@@ -12,8 +12,8 @@ const submitProject = async (req, res) => {
     const newRequirement = {
       ...projectData,
       reqId: customReqId,
-      // UPDATED: Changed from "Pending BA Review" to "Analysis"
-      status: "Analysis", 
+      // REVERTED: Set back to "Pending BA Review"
+      status: "Pending BA Review", 
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
       progress: 0
     };
@@ -45,8 +45,8 @@ const getOverviewStats = async (req, res) => {
       const data = doc.data();
       stats.totalActive++; 
       if (data.status === "Pending Approval") stats.pendingApprovals++;
-      // UPDATED: Changed from "Pending BA Review" to "Analysis"
-      if (data.status === "Analysis" || data.status === "In Analysis") stats.inAnalysis++;
+      // REVERTED: Checking for "Pending BA Review" again
+      if (data.status === "Pending BA Review" || data.status === "In Analysis") stats.inAnalysis++;
       if (data.status === "Clarification Needed") stats.clarificationsNeeded++;
     });
 
@@ -167,7 +167,7 @@ const searchRequirements = async (req, res) => {
   }
 };
 
-// --- NEW: GET ALL REQUESTS FOR THE TABLE ---
+// --- GET ALL REQUESTS FOR THE TABLE ---
 const getAllRequests = async (req, res) => {
   try {
     const snapshot = await db.collection('requirements').orderBy('submittedAt', 'desc').get();
@@ -204,7 +204,200 @@ const getAllRequests = async (req, res) => {
   }
 };
 
+// --- CLARIFICATIONS: GET ALL ---
+const getClarifications = async (req, res) => {
+  try {
+    const snapshot = await db.collection('clarifications').orderBy('createdAt', 'desc').get();
+    let clarifications = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      clarifications.push({
+        id: doc.id,
+        reqId: data.reqId || "REQ-0000",
+        title: data.title || "Untitled",
+        baName: data.baName || "Bhashi Fernando",
+        // Format timestamp or fallback to a string
+        createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+        priority: data.priority || "Medium",
+        source: data.source || "BA", // 'AI' or 'BA'
+        status: data.status || "Pending", // 'Pending' or 'Answered'
+        regarding: data.regarding || "No specific context provided.",
+        question: data.question || "Please provide more details.",
+        answer: data.answer || ""
+      });
+    });
+
+    res.json({ success: true, data: clarifications });
+  } catch (error) {
+    console.error("[Backend Error - getClarifications]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- CLARIFICATIONS: SUBMIT ANSWER ---
+const answerClarification = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { answer } = req.body;
+
+    const clarificationRef = db.collection('clarifications').doc(id);
+    const doc = await clarificationRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: "Clarification not found" });
+    }
+
+    // Update the clarification to answered
+    await clarificationRef.update({
+      answer: answer,
+      status: "Answered",
+      answeredAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Optional: Update the main requirement status back to "Pending BA Review"
+    const reqId = doc.data().reqId;
+    if (reqId) {
+      const reqSnapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
+      if (!reqSnapshot.empty) {
+        await db.collection('requirements').doc(reqSnapshot.docs[0].id).update({
+          status: "Pending BA Review"
+        });
+      }
+    }
+
+    res.json({ success: true, message: "Answer submitted successfully" });
+  } catch (error) {
+    console.error("[Backend Error - answerClarification]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- APPROVALS: GET ALL ---
+const getApprovals = async (req, res) => {
+  try {
+    // Query Firestore for requirements explicitly marked as "Awaiting Review"
+    const snapshot = await db.collection('requirements').where('status', '==', 'Awaiting Review').get();
+    let approvals = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      
+      // Safely format the Firebase Timestamp into a readable string like in image_3.png
+      let formattedDate = "Pending";
+      if (data.submittedAt) {
+        const dateObj = data.submittedAt.toDate();
+        // Generates format: "Jan 14, 2025"
+        formattedDate = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+
+      approvals.push({
+        id: doc.id,
+        reqId: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
+        title: data.title || 'Untitled Feature',
+        submittedBy: data.submittedBy || 'Naveen Dilhan',
+        submittedAt: formattedDate,
+        // Assuming evidence and verification are completed before reaching this status
+        evidenceSubmitted: data.evidenceSubmitted || true, 
+        baVerified: data.baVerified || true, 
+        evidenceImage: data.evidenceImage || null, // A URL stored in Firebase Storage
+        commitLink: data.commitLink || 'github.com/nexba/core/commit/a3f8c21',
+        description: data.description || 'No description provided.'
+      });
+    });
+
+    res.json({ success: true, data: approvals });
+  } catch (error) {
+    console.error("[Backend Error - getApprovals]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- APPROVALS: SUBMIT APPROVAL ---
+const approveRequirement = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const requirementRef = db.collection('requirements').doc(id);
+    const doc = await requirementRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: "Requirement not found" });
+    }
+
+    // Update the requirement status directly to "Approved"
+    await requirementRef.update({
+      status: "Approved",
+      approvedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Add a success message to the activity logs
+    const data = doc.data();
+    await db.collection('activity_logs').add({
+      user: "Client", 
+      action: `Approved evidence for requirement: ${data.title}`,
+      time: admin.firestore.FieldValue.serverTimestamp(),
+      dotColor: "bg-green-500", // Success green dot
+      reqId: data.reqId
+    });
+
+    res.json({ success: true, message: "Requirement approved successfully" });
+  } catch (error) {
+    console.error("[Backend Error - approveRequirement]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- APPROVALS: SUBMIT CHANGE REQUEST ---
+const requestChangeForRequirement = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { changeType, changeDescription } = req.body;
+
+    const requirementRef = db.collection('requirements').doc(id);
+    const doc = await requirementRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, message: "Requirement not found" });
+    }
+
+    // Update status to "Modification Requested" and store the reasons
+    await requirementRef.update({
+      status: "Modification Requested",
+      changeRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastChangeType: changeType, // Storing "Bug Report" or "Scope Change"
+      lastChangeDescription: changeDescription
+    });
+
+    // Add a warning message to the activity logs
+    const data = doc.data();
+    await db.collection('activity_logs').add({
+      user: "Client", 
+      action: `Requested ${changeType.toLowerCase()} for: ${data.title}`,
+      time: admin.firestore.FieldValue.serverTimestamp(),
+      dotColor: "bg-yellow-500", // Warning yellow dot
+      reqId: data.reqId
+    });
+
+    res.json({ success: true, message: "Change request submitted successfully" });
+  } catch (error) {
+    console.error("[Backend Error - requestChangeForRequirement]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
 module.exports = {
-  submitProject, getOverviewStats, getProjectProgress, 
-  getChangeRequests, getActionItems, getRecentActivity, searchRequirements, getAllRequests
+  submitProject, 
+  getOverviewStats, 
+  getProjectProgress, 
+  getChangeRequests, 
+  getActionItems, 
+  getRecentActivity, 
+  searchRequirements, 
+  getAllRequests,
+  getClarifications,
+  answerClarification,
+  getApprovals,
+  approveRequirement,
+  requestChangeForRequirement
 };

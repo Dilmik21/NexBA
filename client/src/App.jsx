@@ -1,10 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 
-// Components
 import ProtectedRoute from "./components/ProtectedRoute"; 
 
-// Pages 
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -14,8 +12,10 @@ import ClientOverview from "./pages/Client/ClientOverview";
 import MyRequests from "./pages/Client/MyRequests";
 import ClientClarifications from "./pages/Client/ClientClarifications";
 import ClientApprovals from "./pages/Client/ClientApprovals";
-// ADDED: Import the new Messages page
 import ClientMessages from "./pages/Client/ClientMessages";
+import ClientArchive from "./pages/Client/ClientArchive";
+// ADDED: Import the new Settings page
+import ClientSettings from "./pages/Client/ClientSettings";
 
 function App() {
   return (
@@ -72,12 +72,30 @@ function App() {
             } 
           />
 
-          {/* NEW: The Messages Page */}
           <Route 
             path="/client/messages" 
             element={
               <ProtectedRoute>
                 <ClientMessages />
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/client/archive" 
+            element={
+              <ProtectedRoute>
+                <ClientArchive />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: The Settings Page */}
+          <Route 
+            path="/client/settings" 
+            element={
+              <ProtectedRoute>
+                <ClientSettings />
               </ProtectedRoute>
             } 
           />

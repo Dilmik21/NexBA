@@ -17,8 +17,23 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userData, setUserData] = useState(null); // Stores Name, Role, etc.
+  const [userData, setUserData] = useState(null); // Stores Name, Role, Image, etc.
   const [loading, setLoading] = useState(true);
+
+  // NEW: Function to manually refresh user data globally (e.g., after profile picture update)
+  const refreshUserData = async () => {
+    if (currentUser) {
+      try {
+        const docRef = doc(db, "users", currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setUserData(docSnap.data());
+        }
+      } catch (error) {
+        console.error("Error refreshing global user data:", error);
+      }
+    }
+  };
 
   // 1. Sign Up (Creates Auth User + Saves extra data to Firestore)
   async function signup(email, password, additionalData) {
@@ -69,7 +84,16 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  const value = { currentUser, userData, signup, login, logout, resetPassword };
+  // EXPORT the new refreshUserData function so Settings can trigger it!
+  const value = { 
+    currentUser, 
+    userData, 
+    refreshUserData, 
+    signup, 
+    login, 
+    logout, 
+    resetPassword 
+  };
 
   return (
     <AuthContext.Provider value={value}>

@@ -189,7 +189,7 @@ const getAllRequests = async (req, res) => {
         rawDbId: doc.id,
         description: data.description || "No description provided.",
         fileName: data.fileName || "No file attached",
-        baName: data.baName || "Bhashi Fernando" // Adding BA Name for the UI
+        baName: data.baName || "Bhashi Fernando"
       });
     });
 
@@ -301,7 +301,7 @@ const approveRequirement = async (req, res) => {
     if (!doc.exists) return res.status(404).json({ success: false, message: "Requirement not found" });
 
     await requirementRef.update({
-      status: "Approved",
+      status: "Approved & Live",
       approvedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -344,7 +344,6 @@ const getMessages = async (req, res) => {
     
     snapshot.forEach(doc => {
       const data = doc.data();
-      
       let formattedTime = "Just now";
       if (data.timestamp) {
         const dateObj = data.timestamp.toDate();
@@ -353,9 +352,9 @@ const getMessages = async (req, res) => {
 
       messages.push({
         id: doc.id,
-        reqId: data.reqId || "GLOBAL", // Maps the message to a project
+        reqId: data.reqId || "GLOBAL",
         text: data.text || "",
-        fileName: data.fileName || null, // Handles attachments
+        fileName: data.fileName || null,
         sender: data.sender || "BA",
         senderName: data.senderName || (data.sender === 'Client' ? "Dilmik Rasanjana" : "Bhashi Fernando"),
         timestamp: formattedTime
@@ -373,11 +372,10 @@ const getMessages = async (req, res) => {
 const sendMessage = async (req, res) => {
   try {
     const { text, sender, senderName, reqId, fileName } = req.body;
-    
     const newMessage = {
       text: text || "",
       reqId: reqId || "GLOBAL",
-      fileName: fileName || null, // Save file name if attached
+      fileName: fileName || null,
       sender: sender || "Client",
       senderName: senderName || "Dilmik Rasanjana",
       timestamp: admin.firestore.FieldValue.serverTimestamp()
@@ -387,6 +385,240 @@ const sendMessage = async (req, res) => {
     res.json({ success: true, id: docRef.id });
   } catch (error) {
     console.error("[Backend Error - sendMessage]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- ARCHIVE: GET ALL COMPLETED / CLOSED ---
+const getArchivedRequirements = async (req, res) => {
+  try {
+    const snapshot = await db.collection('requirements')
+      .where('status', 'in', ['Approved & Live', 'Closed — Superseded', 'Approved', 'Completed']).get();
+    
+    let archives = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      
+      let submittedDate = "Unknown";
+      let completedDate = "Unknown";
+      let rawDate = 0;
+
+      if (data.submittedAt) {
+        const dateObj = data.submittedAt.toDate();
+        rawDate = dateObj.getTime();
+        submittedDate = dateObj.toISOString().split('T')[0];
+      }
+      if (data.approvedAt) {
+        const dateObj = data.approvedAt.toDate();
+        completedDate = dateObj.toISOString().split('T')[0];
+      } else if (data.submittedAt) {
+        const dateObj = data.submittedAt.toDate();
+        dateObj.setDate(dateObj.getDate() + 14); 
+        completedDate = dateObj.toISOString().split('T')[0];
+      }
+
+      archives.push({
+        id: doc.id,
+        reqId: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
+        title: data.title || 'Untitled Feature',
+        submittedAt: submittedDate,
+        completedAt: completedDate,
+        developer: data.submittedBy || 'Naveen Dilhan', 
+        status: data.status === 'Approved' ? 'Approved & Live' : (data.status || 'Approved & Live'),
+        evidenceImage: data.evidenceImage || null,
+        commitLink: data.commitLink || 'github.com/nexba/core/commit/a3f8c21',
+        description: data.description || 'No description provided.',
+        rawDate: rawDate
+      });
+    });
+
+    archives.sort((a, b) => b.rawDate - a.rawDate);
+    res.json({ success: true, data: archives });
+  } catch (error) {
+    console.error("[Backend Error - getArchivedRequirements]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- SETTINGS: GET REAL SETTINGS ---
+const getSettings = async (req, res) => {
+  try {
+    const { uid } = req.query;
+    
+    if (!uid) {
+      return res.status(400).json({ success: false, message: "No UID provided" });
+    }
+
+    const docRef = db.collection('users').doc(uid);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      const initialData = {
+        fullName: "",
+        email: "", 
+        organization: "",
+        role: "Client",
+        profileImage: null, 
+        notifications: {
+          email: true,
+          inApp: true,
+          weeklyDigest: false
+        }
+      };
+      await docRef.set(initialData);
+      return res.json({ success: true, data: initialData });
+    }
+
+    res.json({ success: true, data: doc.data() });
+  } catch (error) {
+    console.error("[Backend Error - getSettings]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- SETTINGS: UPDATE GENERAL ---
+const updateGeneralSettings = async (req, res) => {
+  try {
+    const { uid, fullName, email, organization, profileImage } = req.body;
+    
+    if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
+
+    await db.collection('users').doc(uid).update({
+      fullName, 
+      email, 
+      organization,
+      profileImage: profileImage || null 
+    });
+    res.json({ success: true, message: "Profile updated successfully" });
+  } catch (error) {
+    console.error("[Backend Error - updateGeneralSettings]:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- SETTINGS: UPDATE SECURITY ---
+const updateSecuritySettings = async (req, res) => {
+  try {
+    const { uid, newPassword } = req.body;
+    if (!uid || !newPassword) return res.status(400).json({ success: false, message: "No UID or Password provided" });
+
+    await admin.auth().updateUser(uid, {
+      password: newPassword
+    });
+
+    res.json({ success: true, message: "Password permanently updated in Firebase Auth" });
+  } catch (error) {
+    console.error("[Backend Error - updateSecuritySettings]:", error);
+    res.status(500).json({ success: false, message: error.message }); 
+  }
+};
+
+// --- SETTINGS: UPDATE NOTIFICATIONS ---
+const updateNotificationSettings = async (req, res) => {
+  try {
+    const { uid, key, value } = req.body;
+    if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
+    const docRef = db.collection('users').doc(uid);
+    await docRef.update({
+      [`notifications.${key}`]: value
+    });
+    res.json({ success: true, message: "Notifications updated successfully" });
+  } catch (error) {
+    console.error("[Backend Error - updateNotificationSettings]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// ============================================================================
+// --- NEW: NOTIFICATION ENDPOINTS ---
+// ============================================================================
+
+// --- FETCH NOTIFICATIONS ---
+const getNotifications = async (req, res) => {
+  try {
+    const { uid } = req.query;
+    if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
+
+    // Fetch from Firebase
+    const snapshot = await db.collection('notifications')
+      .where('uid', '==', uid)
+      .orderBy('timestamp', 'desc')
+      .limit(10)
+      .get();
+
+    let notifications = [];
+    let unreadCount = 0;
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (!data.isRead) unreadCount++;
+
+      // Format timestamp elegantly
+      let timeStr = "Just now";
+      if (data.timestamp) {
+          const dateObj = data.timestamp.toDate();
+          timeStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      notifications.push({
+        id: doc.id,
+        title: data.title || "Update",
+        message: data.message || "",
+        isRead: data.isRead || false,
+        time: timeStr
+      });
+    });
+
+    // MOCK SEED DATA: If their notification inbox is empty, automatically create a welcome message!
+    if (notifications.length === 0) {
+      const mockNotif = {
+        uid: uid,
+        title: "Welcome to NexBA!",
+        message: "Your enterprise client dashboard is ready to use. You can submit new requirements from the Requests page.",
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      };
+      const docRef = await db.collection('notifications').add(mockNotif);
+      notifications.push({
+          id: docRef.id, 
+          title: mockNotif.title, 
+          message: mockNotif.message, 
+          isRead: false, 
+          time: "Just now"
+      });
+      unreadCount = 1;
+    }
+
+    res.json({ success: true, data: notifications, unreadCount });
+  } catch (error) {
+    console.error("[Backend Error - getNotifications]:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+// --- MARK NOTIFICATIONS AS READ ---
+const markNotificationsRead = async (req, res) => {
+  try {
+    const { uid } = req.body;
+    if (!uid) return res.status(400).json({ success: false });
+
+    // Find all unread notifications for this user
+    const snapshot = await db.collection('notifications')
+      .where('uid', '==', uid)
+      .where('isRead', '==', false)
+      .get();
+
+    // Use a batch to update them all instantly
+    const batch = db.batch();
+    snapshot.forEach(doc => {
+      batch.update(doc.ref, { isRead: true });
+    });
+    await batch.commit();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Backend Error - markNotificationsRead]:", error);
     res.status(500).json({ success: false });
   }
 };
@@ -406,5 +638,12 @@ module.exports = {
   approveRequirement,
   requestChangeForRequirement,
   getMessages,
-  sendMessage
+  sendMessage,
+  getArchivedRequirements,
+  getSettings,
+  updateGeneralSettings,
+  updateSecuritySettings,
+  updateNotificationSettings,
+  getNotifications,
+  markNotificationsRead
 };

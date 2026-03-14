@@ -8,25 +8,32 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard"; 
+
+// Client Pages
 import ClientOverview from "./pages/Client/ClientOverview";
 import MyRequests from "./pages/Client/MyRequests";
 import ClientClarifications from "./pages/Client/ClientClarifications";
 import ClientApprovals from "./pages/Client/ClientApprovals";
 import ClientMessages from "./pages/Client/ClientMessages";
 import ClientArchive from "./pages/Client/ClientArchive";
-// ADDED: Import the new Settings page
 import ClientSettings from "./pages/Client/ClientSettings";
+
+// BA Pages
+import BAOverview from "./pages/BA/BAOverview";
+import RequirementInbox from "./pages/BA/RequirementInbox"; // <-- NEW IMPORT
 
 function App() {
   return (
     <Router>
       <AuthProvider>
         <Routes>
+          {/* --- PUBLIC ROUTES --- */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           
+          {/* --- SHARED PROTECTED ROUTES --- */}
           <Route 
             path="/dashboard" 
             element={
@@ -36,6 +43,7 @@ function App() {
             } 
           />
 
+          {/* --- CLIENT PROTECTED ROUTES --- */}
           <Route 
             path="/client/overview" 
             element={
@@ -90,12 +98,31 @@ function App() {
             } 
           />
 
-          {/* NEW: The Settings Page */}
           <Route 
             path="/client/settings" 
             element={
               <ProtectedRoute>
                 <ClientSettings />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* --- BA PROTECTED ROUTES --- */}
+          <Route 
+            path="/ba/dashboard" 
+            element={
+              <ProtectedRoute>
+                <BAOverview />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: Requirement Inbox Route */}
+          <Route 
+            path="/ba/inbox" 
+            element={
+              <ProtectedRoute>
+                <RequirementInbox />
               </ProtectedRoute>
             } 
           />

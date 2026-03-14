@@ -1,13 +1,15 @@
 import { useState, useRef } from "react";
 import { X, FileText, Folder, Sparkles, ArrowRight, ArrowLeft, Rocket, Loader2, UploadCloud, File as FileIcon, AlertCircle } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext"; // <-- NEW: IMPORT AUTH TO GET THE USER
 
 export default function NewProjectModal({ isOpen, onClose }) {
+  const { currentUser } = useAuth(); // <-- NEW: GRAB THE CURRENT USER
+
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAIPopup, setShowAIPopup] = useState(false);
   
-  // NEW: State to hold the AI rejection error
   const [aiError, setAiError] = useState(null);
 
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -47,7 +49,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
   const handleAIStructure = async () => {
     if (!formData.description) return;
     setIsGenerating(true);
-    setAiError(null); // Clear any previous errors
+    setAiError(null); 
 
     try {
       const response = await fetch("http://localhost:5000/api/ai/structure-text", {
@@ -58,15 +60,12 @@ export default function NewProjectModal({ isOpen, onClose }) {
       const data = await response.json();
       
       if (data.success) {
-        // AI succeeded!
         setFormData({ ...formData, description: data.structuredText });
         setShowAIPopup(false);
       } else if (data.isInvalidInput) {
-        // AI Gatekeeper rejected it! Show the error.
         setAiError(data.error);
         setShowAIPopup(false);
       } else {
-        // Standard backend error fallback
         setAiError("Something went wrong connecting to the AI. Please try again.");
       }
     } catch (error) {
@@ -80,10 +79,12 @@ export default function NewProjectModal({ isOpen, onClose }) {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
+    // THE FIX: We build the payload and strictly include the UID!
     const finalPayload = {
       ...formData,
       fileName: uploadedFile ? uploadedFile.name : null,
-      fileSize: uploadedFile ? uploadedFile.size : null
+      fileSize: uploadedFile ? uploadedFile.size : null,
+      uid: currentUser?.uid // <-- THIS TELLS THE BACKEND EXACTLY WHO SUBMITTED IT!
     };
 
     try {
@@ -94,7 +95,6 @@ export default function NewProjectModal({ isOpen, onClose }) {
       });
       const data = await response.json();
       if (data.success) {
-        // Reset everything on success
         setStep(1);
         setFormData({ title: "", type: "", description: "", priority: "Medium" });
         setUploadedFile(null);
@@ -202,7 +202,6 @@ export default function NewProjectModal({ isOpen, onClose }) {
           {step === 2 && formData.type === 'text' && (
             <div className="h-full flex flex-col relative animate-in fade-in slide-in-from-right-4 duration-500">
               
-              {/* THE NEW AI ERROR BOX */}
               {aiError && (
                 <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start space-x-3 animate-in slide-in-from-top-2">
                   <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
@@ -219,11 +218,10 @@ export default function NewProjectModal({ isOpen, onClose }) {
                 value={formData.description}
                 onChange={(e) => {
                   setFormData({...formData, description: e.target.value});
-                  if (aiError) setAiError(null); // Clear error as soon as they start typing again
+                  if (aiError) setAiError(null); 
                 }}
               />
               
-              {/* Only show the Sparkles button if there isn't an active error taking up space */}
               {!aiError && (
                 <button 
                   onClick={() => setShowAIPopup(!showAIPopup)}

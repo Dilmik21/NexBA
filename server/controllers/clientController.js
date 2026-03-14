@@ -1,17 +1,45 @@
 const { admin, db } = require('../config/firebase');
 
-// 1. SUBMIT NEW PROJECT
+// --- 1. SUBMIT NEW PROJECT ---
 const submitProject = async (req, res) => {
   try {
     const projectData = req.body;
+    
+    const uid = projectData.uid || req.query.uid; 
+
+    let clientName = "Unknown Client";
+    let companyName = "Unknown Company";
+
+    if (uid) {
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        clientName = userData.fullName || userData.name || "Unknown Client";
+        companyName = userData.organization || userData.company || "Cargills Corporation";
+      }
+    }
+
     const snapshot = await db.collection('requirements').count().get();
     const currentCount = snapshot.data().count;
-    
     const customReqId = `REQ-${1001 + currentCount}`; 
+
+    const rawRisk = (projectData.priority || projectData.riskLevel || projectData.risk || "Medium").toLowerCase();
+    let normalizedRisk = "Medium";
+    if (rawRisk.includes("high") || rawRisk.includes("critical") || rawRisk.includes("urgent")) {
+      normalizedRisk = "High";
+    } else if (rawRisk.includes("low")) {
+      normalizedRisk = "Low";
+    }
     
     const newRequirement = {
-      ...projectData,
+      ...projectData,                     
       reqId: customReqId,
+      clientName: clientName,             
+      submittedBy: clientName,            
+      company: companyName,               
+      riskLevel: normalizedRisk,          
+      risk: normalizedRisk,               
+      type: projectData.type || (projectData.fileUrl ? 'File' : 'Text'),
       status: "Pending BA Review", 
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
       progress: 0
@@ -20,7 +48,7 @@ const submitProject = async (req, res) => {
     const docRef = await db.collection('requirements').add(newRequirement);
 
     await db.collection('activity_logs').add({
-      user: "Client", 
+      user: clientName, 
       action: `Launched new request: ${projectData.title}`,
       time: admin.firestore.FieldValue.serverTimestamp(),
       dotColor: "bg-blue-500", 
@@ -34,7 +62,7 @@ const submitProject = async (req, res) => {
   }
 };
 
-// 2. OVERVIEW STATS
+// --- 2. OVERVIEW STATS (FIXED) ---
 const getOverviewStats = async (req, res) => {
   try {
     const snapshot = await db.collection('requirements').get();
@@ -43,8 +71,12 @@ const getOverviewStats = async (req, res) => {
     snapshot.forEach(doc => {
       const data = doc.data();
       stats.totalActive++; 
+      
       if (data.status === "Pending Approval") stats.pendingApprovals++;
-      if (data.status === "Pending BA Review" || data.status === "In Analysis") stats.inAnalysis++;
+      
+      // THE FIX: Now it ONLY counts if the BA has started processing it with AI!
+      if (data.status === "In Analysis") stats.inAnalysis++;
+      
       if (data.status === "Clarification Needed") stats.clarificationsNeeded++;
     });
 
@@ -54,7 +86,7 @@ const getOverviewStats = async (req, res) => {
   }
 };
 
-// 3. PROJECT PROGRESS
+// --- 3. PROJECT PROGRESS ---
 const getProjectProgress = async (req, res) => {
   try {
     const snapshot = await db.collection('requirements').orderBy('submittedAt', 'desc').limit(5).get();
@@ -74,7 +106,7 @@ const getProjectProgress = async (req, res) => {
   }
 };
 
-// 4. CHANGE REQUESTS
+// --- 4. CHANGE REQUESTS ---
 const getChangeRequests = async (req, res) => {
   try {
     const snapshot = await db.collection('change_requests').where('status', '!=', 'Resolved').get();
@@ -96,7 +128,7 @@ const getChangeRequests = async (req, res) => {
   }
 };
 
-// 5. ACTION ITEMS
+// --- 5. ACTION ITEMS ---
 const getActionItems = async (req, res) => {
   try {
     const snapshot = await db.collection('requirements').where('status', 'in', ['Pending Approval', 'Clarification Needed']).get();
@@ -117,7 +149,7 @@ const getActionItems = async (req, res) => {
   }
 };
 
-// 6. RECENT ACTIVITY
+// --- 6. RECENT ACTIVITY ---
 const getRecentActivity = async (req, res) => {
   try {
     const snapshot = await db.collection('activity_logs').orderBy('time', 'desc').limit(5).get();
@@ -137,7 +169,7 @@ const getRecentActivity = async (req, res) => {
   }
 };
 
-// 7. SEARCH
+// --- 7. SEARCH ---
 const searchRequirements = async (req, res) => {
   try {
     const searchQuery = req.query.q?.toLowerCase() || '';
@@ -185,7 +217,7 @@ const getAllRequests = async (req, res) => {
         type: data.type || 'text',
         date: formattedDate,
         stage: data.status,
-        priority: data.priority || 'Medium',
+        priority: data.priority || data.riskLevel || 'Medium',
         rawDbId: doc.id,
         description: data.description || "No description provided.",
         fileName: data.fileName || "No file attached",
@@ -531,16 +563,14 @@ const updateNotificationSettings = async (req, res) => {
 };
 
 // ============================================================================
-// --- NEW: NOTIFICATION ENDPOINTS ---
+// --- NOTIFICATION ENDPOINTS ---
 // ============================================================================
 
-// --- FETCH NOTIFICATIONS ---
 const getNotifications = async (req, res) => {
   try {
     const { uid } = req.query;
     if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
 
-    // Fetch from Firebase
     const snapshot = await db.collection('notifications')
       .where('uid', '==', uid)
       .orderBy('timestamp', 'desc')
@@ -554,7 +584,6 @@ const getNotifications = async (req, res) => {
       const data = doc.data();
       if (!data.isRead) unreadCount++;
 
-      // Format timestamp elegantly
       let timeStr = "Just now";
       if (data.timestamp) {
           const dateObj = data.timestamp.toDate();
@@ -570,7 +599,6 @@ const getNotifications = async (req, res) => {
       });
     });
 
-    // MOCK SEED DATA: If their notification inbox is empty, automatically create a welcome message!
     if (notifications.length === 0) {
       const mockNotif = {
         uid: uid,
@@ -597,19 +625,16 @@ const getNotifications = async (req, res) => {
   }
 };
 
-// --- MARK NOTIFICATIONS AS READ ---
 const markNotificationsRead = async (req, res) => {
   try {
     const { uid } = req.body;
     if (!uid) return res.status(400).json({ success: false });
 
-    // Find all unread notifications for this user
     const snapshot = await db.collection('notifications')
       .where('uid', '==', uid)
       .where('isRead', '==', false)
       .get();
 
-    // Use a batch to update them all instantly
     const batch = db.batch();
     snapshot.forEach(doc => {
       batch.update(doc.ref, { isRead: true });

@@ -21,7 +21,8 @@ import ClientSettings from "./pages/Client/ClientSettings";
 // BA Pages
 import BAOverview from "./pages/BA/BAOverview";
 import RequirementInbox from "./pages/BA/RequirementInbox";
-import AIAnalysis from "./pages/BA/AIAnalysis"; // <-- NEW IMPORT
+import AIAnalysis from "./pages/BA/AIAnalysis";
+import TaskAssignment from "./pages/BA/TaskAssignment"; // <-- NEW IMPORT
 
 function App() {
   return (
@@ -127,12 +128,21 @@ function App() {
             } 
           />
 
-          {/* NEW: AI Analysis Route */}
           <Route 
             path="/ba/analysis" 
             element={
               <ProtectedRoute>
                 <AIAnalysis />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: Task & Assignment Route */}
+          <Route 
+            path="/ba/tasks" 
+            element={
+              <ProtectedRoute>
+                <TaskAssignment />
               </ProtectedRoute>
             } 
           />

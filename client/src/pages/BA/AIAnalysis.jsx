@@ -82,7 +82,6 @@ export default function AIAnalysis() {
   const [historyList, setHistoryList] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Fetch Clarifications
   const fetchClarifications = async () => {
     setIsRefreshingAns(true);
     try {
@@ -90,7 +89,6 @@ export default function AIAnalysis() {
       const json = await res.json();
       if (json.success) {
         setExistingClarifications(json.data);
-        // Clean up any drafts that are already sent!
         setClarificationQuestions(prev => 
           prev.filter(q => !json.data.some(sent => sent.question === q.text))
         );
@@ -120,7 +118,6 @@ export default function AIAnalysis() {
           setEditedAIData(json.data);
           setIsEditingAI(false);
           
-          // Fetch existing clarifications BEFORE setting the draft questions
           const res = await fetch(`http://localhost:5000/api/ba/analyze/${reqId}/clarifications`);
           const clarifJson = await res.json();
           
@@ -130,7 +127,6 @@ export default function AIAnalysis() {
             sentQuestions = clarifJson.data;
           }
 
-          // FIXED: Filter out AI questions that have already been sent to the client!
           const filteredAIQuestions = json.data.suggestedQuestions
             .filter(aiQ => !sentQuestions.some(sq => sq.question === aiQ))
             .map(q => ({ text: q, isAI: true }));
@@ -169,7 +165,6 @@ export default function AIAnalysis() {
         setAiData(json.data);
         setEditedAIData(json.data);
         
-        // FIXED: Filter out already sent questions even during regeneration
         const filteredAIQuestions = json.data.suggestedQuestions
           .filter(aiQ => !existingClarifications.some(sq => sq.question === aiQ))
           .map(q => ({ text: q, isAI: true }));
@@ -234,7 +229,6 @@ export default function AIAnalysis() {
       });
       const data = await response.json();
       if (data.success) {
-        // Instantly clears the list of draft questions and pulls them into the Client Responses list
         setClarificationQuestions([]); 
         await fetchClarifications(); 
       }
@@ -274,11 +268,11 @@ export default function AIAnalysis() {
 
         <div className="flex-1 pb-10 flex flex-col">
           
-          {/* HEADER & DROPDOWN */}
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center space-x-3">
-              <Sparkles className="w-6 h-6 text-primary" />
+          {/* HEADER & DROPDOWN (UPDATED TO MATCH OTHER PAGES) */}
+          <div className="flex justify-between items-center mb-6 flex-shrink-0">
+            <div>
               <h1 className="text-[22px] font-bold text-navy">AI Analysis Workspace</h1>
+              <p className="text-[13px] text-gray-500 mt-1">Extract constraints, detect ambiguities, and generate user stories using NexBA AI.</p>
             </div>
             
             <div className="relative">
@@ -411,20 +405,62 @@ export default function AIAnalysis() {
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-navy text-[15px] mb-4">Key Requirements</h4>
+                    <h4 className="font-bold text-navy text-[15px] mb-4">Business Requirements</h4>
                     {isEditingAI ? (
                       <textarea 
-                        value={editedAIData.softwareRequirements.join('\n')} 
+                        value={editedAIData.businessRequirements?.join('\n')} 
+                        onChange={(e) => handleArrayChange('businessRequirements', e.target.value)} 
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px]"
+                        placeholder="One requirement per line"
+                      />
+                    ) : (
+                      <ul className="space-y-3">
+                        {aiData?.businessRequirements?.map((req, i) => (
+                          <li key={i} className="flex items-start text-sm text-gray-600 leading-relaxed">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 mr-3 flex-shrink-0"></div>
+                            {req}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-navy text-[15px] mb-4">Software Requirements</h4>
+                    {isEditingAI ? (
+                      <textarea 
+                        value={editedAIData.softwareRequirements?.join('\n')} 
                         onChange={(e) => handleArrayChange('softwareRequirements', e.target.value)} 
                         className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px]"
                         placeholder="One requirement per line"
                       />
                     ) : (
                       <ul className="space-y-3">
-                        {aiData?.softwareRequirements.map((req, i) => (
+                        {aiData?.softwareRequirements?.map((req, i) => (
                           <li key={i} className="flex items-start text-sm text-gray-600 leading-relaxed">
                             <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 mr-3 flex-shrink-0"></div>
                             {req}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-navy text-[15px] mb-4">User Stories</h4>
+                    {isEditingAI ? (
+                      <textarea 
+                        value={editedAIData.userStories?.join('\n')} 
+                        onChange={(e) => handleArrayChange('userStories', e.target.value)} 
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px]"
+                        placeholder="As a [role], I want to [action] so that [reason]"
+                      />
+                    ) : (
+                      <ul className="space-y-3">
+                        {aiData?.userStories?.map((story, i) => (
+                          <li key={i} className="flex items-start text-sm text-gray-600 leading-relaxed">
+                            <User className="w-4 h-4 text-purple-500 mr-3 flex-shrink-0 mt-0.5" />
+                            {story}
                           </li>
                         ))}
                       </ul>
@@ -484,7 +520,6 @@ export default function AIAnalysis() {
                 </div>
                 
                 <div className="p-8 space-y-4 bg-[#F8FAFC]">
-                  {/* Empty State Message */}
                   {clarificationQuestions.length === 0 && (
                     <div className="text-center py-4 border-2 border-dashed border-gray-200 rounded-[16px] bg-white">
                       <p className="text-sm text-gray-400 font-medium">No questions queued. Add a custom question below.</p>

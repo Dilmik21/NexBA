@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const clientController = require('../controllers/clientController');
 
+// --- DASHBOARD & PROJECT ROUTES ---
 router.post('/projects', clientController.submitProject);
 router.get('/overview-stats', clientController.getOverviewStats);
 router.get('/project-progress', clientController.getProjectProgress);
@@ -11,9 +12,11 @@ router.get('/recent-activity', clientController.getRecentActivity);
 router.get('/search', clientController.searchRequirements);
 router.get('/requests', clientController.getAllRequests);
 
-// --- CLARIFICATION & APPROVAL ROUTES ---
+// --- CLARIFICATION ROUTES (Perfectly synced with frontend POST) ---
 router.get('/clarifications', clientController.getClarifications);
 router.post('/clarifications/:id/answer', clientController.answerClarification);
+
+// --- APPROVAL ROUTES ---
 router.get('/approvals', clientController.getApprovals);
 router.post('/approvals/:id/approve', clientController.approveRequirement);
 router.post('/approvals/:id/request-change', clientController.requestChangeForRequirement);
@@ -29,7 +32,7 @@ router.put('/settings/general', clientController.updateGeneralSettings);
 router.put('/settings/security', clientController.updateSecuritySettings);
 router.put('/settings/notifications', clientController.updateNotificationSettings);
 
-// --- NEW: NOTIFICATION ROUTES ---
+// --- NOTIFICATION ROUTES ---
 router.get('/notifications', clientController.getNotifications);
 router.put('/notifications/read', clientController.markNotificationsRead);
 

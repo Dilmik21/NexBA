@@ -70,7 +70,7 @@ export default function RequirementInbox() {
           <div className="flex justify-between items-end mb-6 flex-shrink-0">
             <div>
               <h1 className="text-2xl font-bold text-navy">Requirement Inbox</h1>
-              <p className="text-gray-500 mt-1 text-sm">{requirements.length} new requirements awaiting review.</p>
+              <p className="text-gray-500 mt-1 text-sm">{requirements.length} requirements available.</p>
             </div>
             
             <div className="flex bg-white rounded-xl shadow-sm border border-gray-100 p-1">
@@ -93,7 +93,7 @@ export default function RequirementInbox() {
             <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 py-20">
               <Inbox className="w-16 h-16 text-gray-200 mb-4" />
               <h2 className="text-xl font-bold text-navy">Inbox is Empty</h2>
-              <p className="text-gray-500 mt-2">You have no pending requirements to review.</p>
+              <p className="text-gray-500 mt-2">You have no requirements to review.</p>
             </div>
           ) : viewMode === "cards" ? (
             
@@ -112,11 +112,11 @@ export default function RequirementInbox() {
                           {req.type === 'Text' ? <FileText className="w-3 h-3 mr-1"/> : <File className="w-3 h-3 mr-1"/>}
                           {req.type}
                         </span>
-                        {/* FIXED: Uses req.priority instead of req.risk */}
                         <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${req.priority === 'High' ? 'bg-red-50 text-red-600' : req.priority === 'Medium' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>
                           {req.priority}
                         </span>
                       </div>
+                      {/* The dot ONLY shows if it is truly NEW */}
                       {req.isNew && (
                         <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]"></div>
                       )}
@@ -156,11 +156,15 @@ export default function RequirementInbox() {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          {req.isNew && <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>}
+                          {/* Conditional blue dot */}
+                          {req.isNew ? (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                          ) : (
+                            <div className="w-2 h-2 bg-transparent rounded-full"></div>
+                          )}
                           <span className="text-xs font-bold text-gray-400">{req.id}</span>
                         </div>
                         <div className="flex space-x-1.5">
-                          {/* FIXED: Uses req.priority instead of req.risk */}
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${req.priority === 'High' ? 'text-red-600 bg-red-50' : req.priority === 'Medium' ? 'text-yellow-600 bg-yellow-50' : 'text-green-600 bg-green-50'}`}>{req.priority}</span>
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${req.type === 'Text' ? 'text-primary bg-blue-50/50' : 'text-orange-600 bg-orange-50'}`}>{req.type}</span>
                         </div>
@@ -178,7 +182,6 @@ export default function RequirementInbox() {
                   <div className="p-8 border-b border-gray-50 flex-shrink-0">
                     <div className="flex items-center space-x-3 mb-4">
                       <span className="text-sm font-bold text-gray-400">{selectedReq.id}</span>
-                      {/* FIXED: Uses selectedReq.priority */}
                       <span className={`text-xs font-bold px-2 py-1 rounded-md ${selectedReq.priority === 'High' ? 'bg-red-50 text-red-600' : selectedReq.priority === 'Medium' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{selectedReq.priority}</span>
                       <span className={`flex items-center text-xs font-bold px-2 py-1 rounded-md ${selectedReq.type === 'Text' ? 'bg-blue-50 text-primary' : 'bg-orange-50 text-orange-600'}`}>
                         {selectedReq.type === 'Text' ? <FileText className="w-3 h-3 mr-1"/> : <File className="w-3 h-3 mr-1"/>}
@@ -225,13 +228,16 @@ export default function RequirementInbox() {
                         <Inbox className="w-5 h-5" />
                       </div>
                       <div>
+                        {/* Intelligent text depending on if it has been processed yet! */}
                         <h4 className="font-bold text-primary text-sm mb-1">
-                          {selectedReq.type === 'Text' ? 'Next Step' : 'Document Requirement'}
+                          {selectedReq.isNew ? "Next Step" : "AI Analysis Available"}
                         </h4>
                         <p className="text-sm text-blue-900/70">
-                          {selectedReq.type === 'Text' 
-                            ? "Process this requirement through AI Analysis to generate a summary, detect ambiguities, and build clarification questions."
-                            : "This requirement was submitted as a document. Process it through AI Analysis to extract text via OCR and generate a structured summary."}
+                          {selectedReq.isNew 
+                            ? (selectedReq.type === 'Text' 
+                                ? "Process this requirement through AI Analysis to generate a summary, detect ambiguities, and build clarification questions."
+                                : "This requirement was submitted as a document. Process it through AI Analysis to extract text via OCR and generate a structured summary.")
+                            : "This requirement has been analyzed by NexBA AI. Click below to view the extracted software constraints and ambiguous terms."}
                         </p>
                       </div>
                     </div>
@@ -242,7 +248,8 @@ export default function RequirementInbox() {
                       onClick={() => handleProcessAI(selectedReq.id)}
                       className="bg-primary hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl font-bold text-sm transition-colors shadow-[0_4px_14px_0_rgba(10,102,194,0.39)] hover:shadow-[0_6px_20px_rgba(10,102,194,0.23)] flex items-center"
                     >
-                      Process with AI <ArrowRight className="w-4 h-4 ml-2" />
+                      {/* Smart button text! */}
+                      {selectedReq.isNew ? "Process with AI" : "View AI Analysis"} <ArrowRight className="w-4 h-4 ml-2" />
                     </button>
                   </div>
 

@@ -5,7 +5,7 @@ import BASidebar from "../../components/BA/BASidebar";
 import { Inbox, ClipboardCheck, AlertTriangle, FileText, ArrowRight, Activity, Users, MessageSquare, Briefcase, Loader2 } from "lucide-react";
 
 export default function BAOverview() {
-  // FIXED: Initialize with a default structure so the page renders instantly!
+  // Initialize with a default structure so the page renders instantly!
   const [data, setData] = useState({
     stats: { pendingReviews: 0, verificationQueue: 0, criticalRisks: 0, activeRequirements: 0 },
     inbox: [], changeRequests: [], developerLoad: [], verificationQueue: [], developerUpdates: []
@@ -93,7 +93,12 @@ export default function BAOverview() {
                 data.inbox.map((item, i) => (
                   <div key={i} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition-colors">
                     <div className="flex items-start space-x-4">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0 shadow-sm shadow-blue-200"></div>
+                      {/* FIXED: Conditionally render the blue dot based on isNew */}
+                      {item.isNew ? (
+                        <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0 shadow-sm shadow-blue-200 animate-pulse"></div>
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-transparent mt-2 flex-shrink-0"></div>
+                      )}
                       <div>
                         <p className="font-bold text-navy text-sm">{item.title}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{item.client} • {item.id}</p>

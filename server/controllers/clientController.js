@@ -1,5 +1,19 @@
 const { admin, db } = require('../config/firebase');
 
+// --- SMART HELPERS ---
+const getTimeAgo = (timestamp) => {
+  if (!timestamp) return "Just now";
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const seconds = Math.floor((new Date() - date) / 1000);
+  let interval = seconds / 86400;
+  if (interval > 1) return Math.floor(interval) + " days ago";
+  interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + " hours ago";
+  interval = seconds / 60;
+  if (interval > 1) return Math.floor(interval) + " min ago";
+  return "Just now";
+};
+
 // --- 1. SUBMIT NEW PROJECT ---
 const submitProject = async (req, res) => {
   try {
@@ -62,7 +76,7 @@ const submitProject = async (req, res) => {
   }
 };
 
-// --- 2. OVERVIEW STATS (FIXED) ---
+// --- 2. OVERVIEW STATS ---
 const getOverviewStats = async (req, res) => {
   try {
     const snapshot = await db.collection('requirements').get();
@@ -74,7 +88,7 @@ const getOverviewStats = async (req, res) => {
       
       if (data.status === "Pending Approval") stats.pendingApprovals++;
       
-      // THE FIX: Now it ONLY counts if the BA has started processing it with AI!
+      // ONLY counts if the BA has started processing it with AI!
       if (data.status === "In Analysis") stats.inAnalysis++;
       
       if (data.status === "Clarification Needed") stats.clarificationsNeeded++;
@@ -232,27 +246,56 @@ const getAllRequests = async (req, res) => {
   }
 };
 
-// --- CLARIFICATIONS: GET ALL ---
+// ============================================================================
+// --- CLARIFICATIONS (UPDATED WITH FILES) ---
+// ============================================================================
+
 const getClarifications = async (req, res) => {
   try {
-    const snapshot = await db.collection('clarifications').orderBy('createdAt', 'desc').get();
+    const reqsSnapshot = await db.collection('requirements').get();
+    const requirementsMap = {};
+    reqsSnapshot.forEach(doc => {
+      const data = doc.data();
+      requirementsMap[data.reqId] = data;
+    });
+
+    const snapshot = await db.collection('clarifications').get();
     let clarifications = [];
     
     snapshot.forEach(doc => {
       const data = doc.data();
+      const reqId = data.reqId || "Unknown";
+      
+      const parentReq = requirementsMap[reqId] || {};
+
+      let priority = parentReq.priority || parentReq.riskLevel || "Medium";
+      if (priority.toLowerCase().includes("high")) priority = "Urgent"; 
+
       clarifications.push({
         id: doc.id,
-        reqId: data.reqId || "REQ-0000",
-        title: data.title || "Untitled",
+        reqId: reqId,
+        title: parentReq.title || "Untitled Feature",
         baName: data.baName || "Bhashi Fernando",
-        createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
-        priority: data.priority || "Medium",
-        source: data.source || "BA",
-        status: data.status || "Pending",
-        regarding: data.regarding || "No specific context provided.",
+        timeAgo: getTimeAgo(data.createdAt),
+        rawDate: data.createdAt || 0,
+        priority: priority,
+        isAI: data.source === "BA", 
+        status: data.status || "Pending Client",
+        regarding: parentReq.description || "No specific context provided in the original requirement.",
         question: data.question || "Please provide more details.",
-        answer: data.answer || ""
+        answer: data.answer || "",
+        fileName: data.fileName || null, // EXPOSING FILE DATA
+        fileData: data.fileData || null  // EXPOSING FILE DATA
       });
+    });
+
+    clarifications.sort((a, b) => {
+      if (a.status === 'Pending Client' && b.status !== 'Pending Client') return -1;
+      if (a.status !== 'Pending Client' && b.status === 'Pending Client') return 1;
+      
+      const dateA = a.rawDate?.toMillis ? a.rawDate.toMillis() : 0;
+      const dateB = b.rawDate?.toMillis ? b.rawDate.toMillis() : 0;
+      return dateB - dateA;
     });
 
     res.json({ success: true, data: clarifications });
@@ -262,11 +305,10 @@ const getClarifications = async (req, res) => {
   }
 };
 
-// --- CLARIFICATIONS: SUBMIT ANSWER ---
 const answerClarification = async (req, res) => {
   try {
     const { id } = req.params;
-    const { answer } = req.body;
+    const { answer, fileName, fileData } = req.body; // ACCEPTING FILE DATA
 
     const clarificationRef = db.collection('clarifications').doc(id);
     const doc = await clarificationRef.get();
@@ -275,11 +317,19 @@ const answerClarification = async (req, res) => {
       return res.status(404).json({ success: false, message: "Clarification not found" });
     }
 
-    await clarificationRef.update({
+    const updatePayload = {
       answer: answer,
       status: "Answered",
       answeredAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
+
+    // If file exists, add to payload
+    if (fileName && fileData) {
+      updatePayload.fileName = fileName;
+      updatePayload.fileData = fileData;
+    }
+
+    await clarificationRef.update(updatePayload);
 
     res.json({ success: true, message: "Answer submitted successfully" });
   } catch (error) {

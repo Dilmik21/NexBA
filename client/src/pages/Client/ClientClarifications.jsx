@@ -1,14 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ClientTopBar from "../../components/Client/ClientTopBar";
 import ClientSidebar from "../../components/Client/ClientSidebar";
-import { Sparkles, User, Paperclip, Send, CheckCircle2 } from "lucide-react";
+import { Sparkles, User, Paperclip, Send, Loader2, MessageSquare, CheckCircle2, FileText, X } from "lucide-react";
 
 export default function ClientClarifications() {
-  const [clarifications, setClarifications] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [selectedQuestion, setSelectedQuestion] = useState(null);
+  
   const [answerText, setAnswerText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attachedFile, setAttachedFile] = useState(null); 
+  const fileInputRef = useRef(null); 
+
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchClarifications();
@@ -17,12 +21,16 @@ export default function ClientClarifications() {
   const fetchClarifications = async () => {
     try {
       const response = await fetch("http://localhost:5000/api/client/clarifications");
-      const data = await response.json();
-      if (data.success) {
-        setClarifications(data.data);
-        // Auto-select the first pending item if it exists
-        if (data.data.length > 0) {
-          setSelectedItem(data.data[0]);
+      const json = await response.json();
+      if (json.success) {
+        // Only show questions that still need an answer!
+        const pendingQuestions = json.data.filter(q => q.status === "Pending Client");
+        setQuestions(pendingQuestions);
+        
+        if (pendingQuestions.length > 0) {
+          setSelectedQuestion(pendingQuestions[0]);
+        } else {
+          setSelectedQuestion(null);
         }
       }
     } catch (error) {
@@ -32,21 +40,65 @@ export default function ClientClarifications() {
     }
   };
 
-  const handleSendAnswer = async () => {
-    if (!answerText.trim() || !selectedItem) return;
-    setIsSubmitting(true);
+  const handleSelect = (q) => {
+    setSelectedQuestion(q);
+    setAnswerText(""); 
+    setAttachedFile(null); 
+  };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { 
+        alert("File is too large. Please select a file under 2MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAttachedFile({
+          name: file.name,
+          data: reader.result
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSendAnswer = async () => {
+    if (!answerText.trim() || !selectedQuestion) return;
+    
+    setIsSubmitting(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/client/clarifications/${selectedItem.id}/answer`, {
+      const payload = { 
+        answer: answerText,
+        fileName: attachedFile ? attachedFile.name : null,
+        fileData: attachedFile ? attachedFile.data : null
+      };
+
+      // FIXED: Changed method to "POST" to perfectly match your backend routes!
+      const response = await fetch(`http://localhost:5000/api/client/clarifications/${selectedQuestion.id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answer: answerText })
+        body: JSON.stringify(payload)
       });
+      const json = await response.json();
       
-      const data = await response.json();
-      if (data.success) {
+      if (json.success) {
+        // Remove the answered question from the list immediately!
+        const remainingQuestions = questions.filter(q => q.id !== selectedQuestion.id);
+        setQuestions(remainingQuestions);
+        
+        // Auto-select the next question, or clear the screen if done
+        if (remainingQuestions.length > 0) {
+          setSelectedQuestion(remainingQuestions[0]);
+        } else {
+          setSelectedQuestion(null);
+        }
+        
         setAnswerText("");
-        fetchClarifications(); // Refresh the list
+        setAttachedFile(null);
+      } else {
+        console.error("Failed to save answer:", json.message);
       }
     } catch (error) {
       console.error("Error submitting answer:", error);
@@ -55,8 +107,8 @@ export default function ClientClarifications() {
     }
   };
 
-  // Helper to format the time roughly like your design
   const timeAgo = (dateString) => {
+    if (!dateString) return "Just now";
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
@@ -67,191 +119,175 @@ export default function ClientClarifications() {
     return `${Math.floor(diffInHours / 24)} days ago`;
   };
 
-  const pendingCount = clarifications.filter(c => c.status === 'Pending').length;
+  const getPriorityBadge = (priority) => {
+    if (priority === 'Urgent' || priority === 'High') return <span className="bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded">Urgent</span>;
+    if (priority === 'Medium') return <span className="bg-yellow-50 text-yellow-600 text-[10px] font-bold px-2 py-0.5 rounded">Medium</span>;
+    return <span className="bg-gray-50 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded">Low</span>;
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
       <ClientTopBar />
 
       <div className="flex max-w-[1600px] mx-auto pt-6 px-6 gap-8">
-        <div className="hidden lg:block w-64 flex-shrink-0">
+        <div className="hidden lg:block flex-shrink-0">
           <ClientSidebar />
         </div>
 
         <div className="flex-1 pb-10 flex flex-col h-[calc(100vh-100px)]">
           
-          {/* Header */}
           <div className="mb-6 flex-shrink-0">
-            <h1 className="text-2xl font-bold text-navy">Clarifications</h1>
-            <p className="text-gray-500 mt-1 text-sm">
-              {pendingCount} questions from your Business Analyst need a response.
+            <h1 className="text-[22px] font-bold text-navy">Clarifications</h1>
+            <p className="text-gray-500 mt-1 text-[13px]">
+              {questions.length} questions from your Business Analyst need a response.
             </p>
           </div>
 
-          {/* Main Split Layout */}
           <div className="flex gap-6 flex-1 min-h-0">
             
-            {/* LEFT COLUMN: List */}
-            <div className="w-1/3 bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col overflow-hidden">
-              <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                <h3 className="font-bold text-navy text-sm">Questions ({clarifications.length})</h3>
+            {/* LEFT PANE - LIST */}
+            <div className="w-[350px] bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-shrink-0">
+              <div className="p-5 border-b border-gray-50 font-bold text-[13px] text-gray-500 bg-gray-50/30">
+                Action Items ({questions.length})
               </div>
               
-              <div className="overflow-y-auto flex-1 p-3 space-y-2">
+              <div className="overflow-y-auto flex-1 p-2 space-y-1">
                 {isLoading ? (
-                  <p className="text-center text-gray-400 text-sm py-8">Loading...</p>
-                ) : clarifications.length === 0 ? (
-                  <p className="text-center text-gray-400 text-sm py-8">No clarifications needed!</p>
+                  <div className="p-8 text-center text-gray-400 flex flex-col items-center">
+                    <Loader2 className="w-6 h-6 animate-spin mb-2 text-primary" />
+                    <p className="text-sm">Loading questions...</p>
+                  </div>
+                ) : questions.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400">
+                    <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-green-400 opacity-50" />
+                    <p className="font-bold text-navy">All Caught Up!</p>
+                    <p className="text-sm mt-1 text-gray-400">You have answered all questions.</p>
+                  </div>
                 ) : (
-                  clarifications.map((item) => (
+                  questions.map(q => (
                     <div 
-                      key={item.id}
-                      onClick={() => setSelectedItem(item)}
-                      className={`p-4 rounded-2xl cursor-pointer transition-all border ${
-                        selectedItem?.id === item.id 
-                          ? 'border-blue-200 bg-blue-50/50 shadow-sm' 
-                          : 'border-transparent hover:bg-gray-50 hover:border-gray-100'
-                      }`}
+                      key={q.id}
+                      onClick={() => handleSelect(q)}
+                      className={`p-4 rounded-2xl cursor-pointer transition-colors border ${selectedQuestion?.id === q.id ? 'bg-white shadow-[0_4px_20px_rgb(0,0,0,0.06)] border-transparent' : 'border-transparent hover:bg-gray-50'}`}
                     >
-                      <div className="flex items-center space-x-2 mb-2">
-                        <span className="text-[10px] font-bold text-gray-400">{item.reqId}</span>
-                        
-                        {/* Source Tag */}
-                        {item.source === 'AI' ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-600 flex items-center">
-                            <Sparkles className="w-3 h-3 mr-1" /> AI
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-600 flex items-center">
-                            <User className="w-3 h-3 mr-1" /> BA
-                          </span>
-                        )}
-
-                        {/* Priority / Status Tag */}
-                        {item.status === 'Answered' ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-600 flex items-center">
-                            <CheckCircle2 className="w-3 h-3 mr-1" /> Answered
-                          </span>
-                        ) : (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                            item.priority === 'Urgent' ? 'bg-red-100 text-red-600' :
-                            item.priority === 'Medium' ? 'bg-orange-100 text-orange-600' :
-                            'bg-gray-100 text-gray-600'
-                          }`}>
-                            {item.priority}
-                          </span>
-                        )}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[11px] font-bold text-gray-400">{q.reqId}</span>
+                          {q.isAI ? (
+                            <span className="flex items-center bg-purple-50 text-purple-600 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                              <Sparkles className="w-2.5 h-2.5 mr-1" /> AI
+                            </span>
+                          ) : (
+                            <span className="flex items-center bg-blue-50 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
+                              <User className="w-2.5 h-2.5 mr-1" /> BA
+                            </span>
+                          )}
+                        </div>
+                        {getPriorityBadge(q.priority)}
                       </div>
-                      
-                      <h4 className="font-bold text-navy text-sm mb-1 truncate">{item.title}</h4>
-                      <p className="text-xs text-gray-500">{item.baName} • {timeAgo(item.createdAt)}</p>
+                      <h4 className={`font-bold text-[13px] truncate mb-1 ${selectedQuestion?.id === q.id ? 'text-navy' : 'text-gray-700'}`}>{q.title}</h4>
+                      <p className="text-[11px] text-gray-400 truncate">{q.baName} • {timeAgo(q.createdAt)}</p>
                     </div>
                   ))
                 )}
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Details & Response */}
-            <div className="flex-1 bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col overflow-hidden">
-              {selectedItem ? (
-                <>
-                  {/* Right Header */}
-                  <div className="p-8 border-b border-gray-50">
-                    <div className="flex items-center space-x-3 mb-3">
-                      <span className="text-xs font-bold text-gray-400">{selectedItem.reqId}</span>
-                      {selectedItem.status !== 'Answered' && (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          selectedItem.priority === 'Urgent' ? 'bg-red-100 text-red-600' :
-                          selectedItem.priority === 'Medium' ? 'bg-orange-100 text-orange-600' :
-                          'bg-gray-100 text-gray-600'
-                        }`}>
-                          {selectedItem.priority}
-                        </span>
-                      )}
-                    </div>
-                    <h2 className="text-xl font-bold text-navy">{selectedItem.title}</h2>
-                    <p className="text-sm text-gray-500 mt-1">Question from {selectedItem.baName}</p>
+            {/* RIGHT PANE - DETAIL VIEW */}
+            {selectedQuestion ? (
+              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col min-h-0">
+                
+                {/* Header */}
+                <div className="p-8 border-b border-gray-50 flex-shrink-0">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <span className="text-[11px] font-bold text-gray-400">{selectedQuestion.reqId}</span>
+                    {getPriorityBadge(selectedQuestion.priority)}
                   </div>
-
-                  {/* Scrollable Content */}
-                  <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                    
-                    {/* Regarding Block */}
-                    <div>
-                      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Regarding</h3>
-                      <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100 text-gray-600 text-sm italic">
-                        "{selectedItem.regarding}"
-                      </div>
-                    </div>
-
-                    {/* Question Block */}
-                    <div className={`p-6 rounded-2xl border-l-4 shadow-sm ${
-                      selectedItem.source === 'AI' 
-                        ? 'border-purple-500 bg-purple-50/30' 
-                        : 'border-blue-500 bg-blue-50/30'
-                    }`}>
-                      <div className="flex items-center space-x-2 mb-4">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${
-                          selectedItem.source === 'AI' ? 'bg-purple-500' : 'bg-blue-500'
-                        }`}>
-                          {selectedItem.source === 'AI' ? <Sparkles className="w-4 h-4" /> : <User className="w-4 h-4" />}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-navy">{selectedItem.baName}</p>
-                          <p className={`text-[10px] font-semibold ${
-                            selectedItem.source === 'AI' ? 'text-purple-600' : 'text-blue-600'
-                          }`}>
-                            {selectedItem.source === 'AI' ? 'AI Generated Question' : 'Manual Question'}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-navy font-medium text-sm leading-relaxed">
-                        {selectedItem.question}
-                      </p>
-                    </div>
-
-                    {/* Response Area */}
-                    {selectedItem.status === 'Answered' ? (
-                      <div>
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Your Response</h3>
-                        <div className="p-5 bg-green-50/50 rounded-2xl border border-green-100 text-navy text-sm">
-                          {selectedItem.answer}
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Your Response</h3>
-                        <textarea
-                          value={answerText}
-                          onChange={(e) => setAnswerText(e.target.value)}
-                          placeholder="Type your answer here..."
-                          className="w-full h-32 p-5 bg-white border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none text-sm text-navy"
-                        />
-                        <div className="flex justify-between items-center mt-4">
-                          <button className="flex items-center text-sm font-semibold text-gray-500 hover:text-navy transition-colors">
-                            <Paperclip className="w-4 h-4 mr-2" /> Attach File
-                          </button>
-                          <button
-                            onClick={handleSendAnswer}
-                            disabled={!answerText.trim() || isSubmitting}
-                            className="bg-gray-200 hover:bg-primary text-gray-500 hover:text-white px-6 py-2.5 rounded-xl font-bold flex items-center transition-all disabled:opacity-50 disabled:hover:bg-gray-200 disabled:hover:text-gray-500"
-                          >
-                            <Send className="w-4 h-4 mr-2" /> 
-                            {isSubmitting ? 'Sending...' : 'Send Answer'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                  <Sparkles className="w-12 h-12 mb-4 text-gray-200" />
-                  <p>Select a question from the list to view details.</p>
+                  <h2 className="text-[20px] font-bold text-navy mb-1">{selectedQuestion.title}</h2>
+                  <p className="text-[13px] text-gray-400">Question from {selectedQuestion.baName}</p>
                 </div>
-              )}
-            </div>
 
+                {/* Scrollable Content */}
+                <div className="p-8 flex-1 overflow-y-auto bg-gray-50/30">
+                  
+                  <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Regarding</h3>
+                  <div className="bg-[#F8FAFC] p-5 rounded-[16px] text-[#475569] text-[14px] leading-relaxed italic border border-gray-100 mb-8 line-clamp-3">
+                    "{selectedQuestion.regarding}"
+                  </div>
+
+                  <div className="bg-white p-6 rounded-[16px] border border-purple-100 shadow-sm relative group flex items-start border-l-[4px] border-l-purple-500 mb-8">
+                    <div className="w-8 h-8 bg-purple-50 rounded-full flex items-center justify-center flex-shrink-0 mr-4">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center mb-1">
+                        <span className="text-[12px] font-bold text-navy mr-2">{selectedQuestion.baName}</span>
+                        <span className="text-[11px] text-purple-600 font-medium bg-purple-50 px-2 py-0.5 rounded">AI Generated Question</span>
+                      </div>
+                      <p className="text-[15px] text-navy font-medium leading-relaxed mt-2">{selectedQuestion.question}</p>
+                    </div>
+                  </div>
+
+                  {/* Response Area */}
+                  <div>
+                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Your Response</h3>
+                    
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      onChange={handleFileChange} 
+                      className="hidden" 
+                    />
+
+                    <div className="bg-white border border-gray-200 rounded-[16px] overflow-hidden focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all shadow-sm">
+                      <textarea 
+                        value={answerText}
+                        onChange={(e) => setAnswerText(e.target.value)}
+                        placeholder="Type your answer here..."
+                        className="w-full h-32 p-5 text-[14px] text-navy resize-none outline-none placeholder-gray-400 bg-transparent"
+                      />
+                      
+                      {attachedFile && (
+                        <div className="mx-5 mb-3 p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center justify-between">
+                          <div className="flex items-center text-xs font-bold text-primary">
+                            <FileText className="w-4 h-4 mr-2" />
+                            <span className="truncate max-w-[200px]">{attachedFile.name}</span>
+                          </div>
+                          <button onClick={() => setAttachedFile(null)} className="p-1 hover:bg-blue-100 rounded-lg text-gray-400 hover:text-red-500 transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-between items-center">
+                        <button 
+                          onClick={() => fileInputRef.current.click()}
+                          className="flex items-center text-[13px] font-semibold text-gray-500 hover:text-primary transition-colors"
+                        >
+                          <Paperclip className="w-4 h-4 mr-2" /> Attach File
+                        </button>
+                        <button 
+                          onClick={handleSendAnswer}
+                          disabled={!answerText.trim() || isSubmitting}
+                          className="bg-gray-200 hover:bg-primary hover:text-white text-gray-600 text-[13px] font-bold px-6 py-2.5 rounded-full transition-all flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />} 
+                          Send Answer
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col items-center justify-center text-gray-400">
+                <CheckCircle2 className="w-16 h-16 mb-4 text-green-400 opacity-40" />
+                <h3 className="font-bold text-navy text-xl">You're all caught up!</h3>
+                <p className="mt-2 text-sm text-gray-500">There are no pending questions for you to review.</p>
+              </div>
+            )}
+            
           </div>
         </div>
       </div>

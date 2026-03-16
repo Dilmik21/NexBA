@@ -20,7 +20,8 @@ import ClientSettings from "./pages/Client/ClientSettings";
 
 // BA Pages
 import BAOverview from "./pages/BA/BAOverview";
-import RequirementInbox from "./pages/BA/RequirementInbox"; // <-- NEW IMPORT
+import RequirementInbox from "./pages/BA/RequirementInbox";
+import AIAnalysis from "./pages/BA/AIAnalysis"; // <-- NEW IMPORT
 
 function App() {
   return (
@@ -117,12 +118,21 @@ function App() {
             } 
           />
 
-          {/* NEW: Requirement Inbox Route */}
           <Route 
             path="/ba/inbox" 
             element={
               <ProtectedRoute>
                 <RequirementInbox />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: AI Analysis Route */}
+          <Route 
+            path="/ba/analysis" 
+            element={
+              <ProtectedRoute>
+                <AIAnalysis />
               </ProtectedRoute>
             } 
           />

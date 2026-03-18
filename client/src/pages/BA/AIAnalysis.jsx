@@ -72,7 +72,9 @@ export default function AIAnalysis() {
   const [isEditingAI, setIsEditingAI] = useState(false);
   const [editedAIData, setEditedAIData] = useState(null);
 
-  const [clarificationQuestions, setClarificationQuestions] = useState([]);
+  // NEW: Separated AI Suggestions and Final Drafted Questions
+  const [aiSuggestedQuestions, setAiSuggestedQuestions] = useState([]);
+  const [draftedQuestions, setDraftedQuestions] = useState([]);
   const [newQuestion, setNewQuestion] = useState("");
   const [isSending, setIsSending] = useState(false);
   
@@ -89,8 +91,10 @@ export default function AIAnalysis() {
       const json = await res.json();
       if (json.success) {
         setExistingClarifications(json.data);
-        setClarificationQuestions(prev => 
-          prev.filter(q => !json.data.some(sent => sent.question === q.text))
+        
+        // Remove AI suggestions that match newly fetched answers
+        setAiSuggestedQuestions(prev => 
+          prev.filter(q => !json.data.some(sent => sent.question === q))
         );
       }
     } catch (e) {
@@ -127,11 +131,13 @@ export default function AIAnalysis() {
             sentQuestions = clarifJson.data;
           }
 
-          const filteredAIQuestions = json.data.suggestedQuestions
-            .filter(aiQ => !sentQuestions.some(sq => sq.question === aiQ))
-            .map(q => ({ text: q, isAI: true }));
+          // Setup AI Suggestions (Exclude ones already sent or drafted)
+          const filteredAIQuestions = json.data.suggestedQuestions.filter(aiQ => 
+            !sentQuestions.some(sq => sq.question === aiQ)
+          );
             
-          setClarificationQuestions(filteredAIQuestions);
+          setAiSuggestedQuestions(filteredAIQuestions);
+          setDraftedQuestions([]); // Start with empty draft list
         }
       } catch (error) {
         console.error("AI Error:", error);
@@ -165,11 +171,12 @@ export default function AIAnalysis() {
         setAiData(json.data);
         setEditedAIData(json.data);
         
-        const filteredAIQuestions = json.data.suggestedQuestions
-          .filter(aiQ => !existingClarifications.some(sq => sq.question === aiQ))
-          .map(q => ({ text: q, isAI: true }));
+        const filteredAIQuestions = json.data.suggestedQuestions.filter(aiQ => 
+          !existingClarifications.some(sq => sq.question === aiQ) &&
+          !draftedQuestions.includes(aiQ)
+        );
           
-        setClarificationQuestions(filteredAIQuestions);
+        setAiSuggestedQuestions(filteredAIQuestions);
         setIsEditingAI(false);
       }
     } catch (error) {
@@ -203,25 +210,40 @@ export default function AIAnalysis() {
     setEditedAIData({ ...editedAIData, [field]: value.split('\n').filter(line => line.trim() !== '') });
   };
 
-  const removeQuestion = (indexToRemove) => {
-    setClarificationQuestions(clarificationQuestions.filter((_, index) => index !== indexToRemove));
+  // --- HITL QUESTION LOGIC ---
+
+  const addAISuggestionToDraft = (questionText) => {
+    // Move from AI list to Draft list
+    setAiSuggestedQuestions(aiSuggestedQuestions.filter(q => q !== questionText));
+    setDraftedQuestions([...draftedQuestions, questionText]);
+  };
+
+  const removeDraftedQuestion = (indexToRemove) => {
+    const questionToRemove = draftedQuestions[indexToRemove];
+    setDraftedQuestions(draftedQuestions.filter((_, index) => index !== indexToRemove));
+    
+    // Put it back in AI suggestions if it originally came from there
+    if (aiData?.suggestedQuestions?.includes(questionToRemove)) {
+      setAiSuggestedQuestions([...aiSuggestedQuestions, questionToRemove]);
+    }
   };
 
   const addCustomQuestion = (e) => {
     if (e.key === 'Enter' || e.type === 'click') {
       e.preventDefault();
       if (newQuestion.trim()) {
-        setClarificationQuestions([...clarificationQuestions, { text: newQuestion.trim(), isAI: false }]);
+        setDraftedQuestions([...draftedQuestions, newQuestion.trim()]);
         setNewQuestion("");
       }
     }
   };
 
   const sendToClient = async () => {
-    if (clarificationQuestions.length === 0) return;
+    if (draftedQuestions.length === 0) return;
     setIsSending(true);
     try {
-      const payload = { reqId: reqId, questions: clarificationQuestions.map(q => q.text) };
+      // Backend automatically sets source: "BA", so client thinks it's purely human
+      const payload = { reqId: reqId, questions: draftedQuestions };
       const response = await fetch("http://localhost:5000/api/ba/clarifications/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -229,7 +251,7 @@ export default function AIAnalysis() {
       });
       const data = await response.json();
       if (data.success) {
-        setClarificationQuestions([]); 
+        setDraftedQuestions([]); 
         await fetchClarifications(); 
       }
     } catch (error) {
@@ -268,7 +290,7 @@ export default function AIAnalysis() {
 
         <div className="flex-1 pb-10 flex flex-col">
           
-          {/* HEADER & DROPDOWN (UPDATED TO MATCH OTHER PAGES) */}
+          {/* HEADER & DROPDOWN */}
           <div className="flex justify-between items-center mb-6 flex-shrink-0">
             <div>
               <h1 className="text-[22px] font-bold text-navy">AI Analysis Workspace</h1>
@@ -512,52 +534,79 @@ export default function AIAnalysis() {
                 </div>
               </div>
 
-              {/* SECTION 3: CLARIFICATION BUILDER */}
+              {/* SECTION 3: HITL CLARIFICATION BUILDER */}
               <div className="bg-white rounded-[24px] shadow-sm border border-gray-100 overflow-hidden mb-6">
                 <div className="px-8 py-6 border-b border-gray-50">
                   <h3 className="font-bold text-navy text-[15px]">Clarification Builder</h3>
                   <p className="text-xs text-gray-400 mt-1 font-medium">Draft and send questions to the client</p>
                 </div>
                 
-                <div className="p-8 space-y-4 bg-[#F8FAFC]">
-                  {clarificationQuestions.length === 0 && (
-                    <div className="text-center py-4 border-2 border-dashed border-gray-200 rounded-[16px] bg-white">
-                      <p className="text-sm text-gray-400 font-medium">No questions queued. Add a custom question below.</p>
+                <div className="p-8 space-y-6 bg-[#F8FAFC]">
+                  
+                  {/* --- AI Suggestions List --- */}
+                  {aiSuggestedQuestions.length > 0 && (
+                    <div className="mb-8">
+                      <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center">
+                        <Sparkles className="w-3.5 h-3.5 mr-2 text-purple-400" /> AI Suggestions
+                      </h4>
+                      <div className="space-y-3">
+                        {aiSuggestedQuestions.map((q, i) => (
+                          <div key={`ai-${i}`} className="bg-purple-50/50 p-4 rounded-xl border border-purple-100/50 flex items-start pr-12 relative group">
+                            <p className="text-[13.5px] text-gray-600 font-medium leading-relaxed">{q}</p>
+                            <button 
+                              onClick={() => addAISuggestionToDraft(q)}
+                              title="Add to draft"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-purple-400 hover:text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 
-                  {clarificationQuestions.map((q, i) => (
-                    <div key={i} className="bg-white p-5 rounded-[16px] border border-gray-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] relative group flex items-start pr-12 transition-all hover:border-purple-200">
-                      {q.isAI ? (
-                        <Sparkles className="w-4 h-4 text-purple-500 flex-shrink-0 mt-1 mr-3" />
-                      ) : (
-                        <User className="w-4 h-4 text-blue-500 flex-shrink-0 mt-1 mr-3" />
-                      )}
-                      <div>
-                        {q.isAI && <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block mb-1.5">AI Suggested</span>}
-                        <p className="text-[14px] text-navy font-medium leading-relaxed">{q.text}</p>
-                      </div>
-                      <button 
-                        onClick={() => removeQuestion(i)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
+                  {/* --- BA Draft List --- */}
+                  <div>
+                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center">
+                      <FileText className="w-3.5 h-3.5 mr-2 text-blue-400" /> Final Draft
+                    </h4>
 
-                  <div className="relative mt-6">
+                    {draftedQuestions.length === 0 ? (
+                      <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-[16px] bg-white">
+                        <p className="text-[13px] text-gray-400 font-medium">No questions queued. Click + on an AI suggestion above, or type your own below.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {draftedQuestions.map((q, i) => (
+                          <div key={`draft-${i}`} className="bg-white p-4 rounded-[16px] border border-blue-100 shadow-sm relative group flex items-start pr-12 transition-all">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 mr-3 flex-shrink-0"></div>
+                            <p className="text-[14px] text-navy font-medium leading-relaxed">{q}</p>
+                            <button 
+                              onClick={() => removeDraftedQuestion(i)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Custom Question Input */}
+                  <div className="relative mt-2">
                     <input 
                       type="text" 
-                      placeholder="Add your own question..." 
+                      placeholder="Type a custom question and press Enter..." 
                       value={newQuestion}
                       onChange={(e) => setNewQuestion(e.target.value)}
                       onKeyDown={addCustomQuestion}
-                      className="w-full bg-white border border-gray-100 text-sm text-navy px-6 py-4 rounded-full outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all pr-14 shadow-sm"
+                      className="w-full bg-white border border-gray-200 text-sm text-navy px-6 py-4 rounded-xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all pr-14 shadow-sm"
                     />
                     <button 
                       onClick={addCustomQuestion}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-primary hover:bg-blue-50 rounded-full transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-primary hover:bg-blue-50 rounded-lg transition-colors"
                     >
                       <Plus className="w-5 h-5" />
                     </button>
@@ -565,15 +614,15 @@ export default function AIAnalysis() {
 
                   <button 
                     onClick={sendToClient}
-                    disabled={clarificationQuestions.length === 0 || isSending}
-                    className="w-full mt-8 bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-full shadow-[0_8px_20px_rgba(10,102,194,0.2)] transition-all hover:-translate-y-0.5 flex items-center justify-center disabled:opacity-50 disabled:hover:translate-y-0 text-sm"
+                    disabled={draftedQuestions.length === 0 || isSending}
+                    className="w-full mt-6 bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-xl shadow-[0_8px_20px_rgba(10,102,194,0.2)] transition-all hover:-translate-y-0.5 flex items-center justify-center disabled:opacity-50 disabled:hover:translate-y-0 text-sm"
                   >
                     {isSending ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                       <>
                         <Send className="w-4 h-4 mr-2" /> 
-                        Send {clarificationQuestions.length} Questions to Client
+                        Send {draftedQuestions.length} Questions to Client
                       </>
                     )}
                   </button>

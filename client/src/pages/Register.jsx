@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { ArrowLeft } from "lucide-react"; // Import the back arrow icon
+import { auth } from "../firebase"; // <--- FIXED PATH!
+import { sendEmailVerification, signOut } from "firebase/auth";
+import { ArrowLeft } from "lucide-react"; 
 import logoDark from '../assets/logo-dark.png';
 
 export default function Register() {
@@ -25,7 +27,9 @@ export default function Register() {
         organization: formData.organization,
         role: role
       });
-      navigate("/login", { state: { message: "Account created successfully! Please log in." } });
+
+      // Navigate to login with a success message instructing them to check their email
+      navigate("/login", { state: { message: "Account created! Please check your email inbox to verify your account before logging in." } });
     } catch (err) {
       setError("Failed to create account: " + err.message);
     }

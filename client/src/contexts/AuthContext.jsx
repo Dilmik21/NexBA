@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  sendEmailVerification // <-- ADDED THIS
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
@@ -35,7 +36,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // 1. Sign Up (Creates Auth User + Saves extra data to Firestore)
+  // 1. Sign Up (Creates Auth User + Saves extra data to Firestore + Sends Email)
   async function signup(email, password, additionalData) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
@@ -47,6 +48,9 @@ export function AuthProvider({ children }) {
       ...additionalData,
       createdAt: new Date()
     });
+
+    // --- FORCE THE VERIFICATION EMAIL TO SEND ---
+    await sendEmailVerification(user);
     
     return userCredential;
   }

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { auth } from "../firebase"; // <--- FIXED PATH!
+import { signOut } from "firebase/auth";
 import logoDark from '../assets/logo-dark.png';
 
 export default function Login() {
@@ -36,6 +38,16 @@ export default function Login() {
       }
 
       await login(email, password);
+
+      // --- THE VERIFICATION CHECK ---
+      if (auth.currentUser && !auth.currentUser.emailVerified) {
+        // If they haven't verified, log them back out instantly to protect the app
+        await signOut(auth);
+        setError("Please verify your email before logging in. Check your inbox.");
+        setLoading(false);
+        return; // Stops them from going to the dashboard
+      }
+
       navigate("/dashboard"); 
     } catch (err) {
       if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {

@@ -2,9 +2,12 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom"; 
 import BATopBar from "../../components/BA/BATopBar"; 
 import BASidebar from "../../components/BA/BASidebar";
+import { useAuth } from "../../contexts/AuthContext"; // <-- IMPORTED AUTH CONTEXT
 import { Inbox, ClipboardCheck, AlertTriangle, FileText, ArrowRight, Activity, Users, MessageSquare, Briefcase, Loader2 } from "lucide-react";
 
 export default function BAOverview() {
+  const { currentUser, userData } = useAuth(); // <-- EXTRACTED LOGGED-IN BA
+  
   // Initialize with a default structure so the page renders instantly!
   const [data, setData] = useState({
     stats: { pendingReviews: 0, verificationQueue: 0, criticalRisks: 0, activeRequirements: 0 },
@@ -14,8 +17,11 @@ export default function BAOverview() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      if (!currentUser) return; // Wait until Firebase Auth loads the user
+      
       try {
-        const response = await fetch("http://localhost:5000/api/ba/overview");
+        // SECURE FETCH: Passing the UID so the backend only returns THIS BA's data
+        const response = await fetch(`http://localhost:5000/api/ba/overview?uid=${currentUser.uid}`);
         const json = await response.json();
         if (json.success) setData(json.data);
       } catch (error) {
@@ -24,8 +30,12 @@ export default function BAOverview() {
         setIsLoading(false);
       }
     };
+    
     fetchDashboardData();
-  }, []);
+  }, [currentUser]); // Re-run if the user changes
+
+  // Extract just the first name for a friendly greeting
+  const firstName = userData?.fullName?.split(" ")[0] || "BA";
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
@@ -41,7 +51,7 @@ export default function BAOverview() {
           {/* Header */}
           <div>
             <h1 className="text-2xl font-bold text-navy">BA Dashboard</h1>
-            <p className="text-gray-500 mt-1 text-sm">Good morning, Bhashi. Here's your command center overview.</p>
+            <p className="text-gray-500 mt-1 text-sm">Good morning, {firstName}. Here's your command center overview.</p>
           </div>
 
           {/* 4 STAT CARDS */}
@@ -49,7 +59,7 @@ export default function BAOverview() {
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
               <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mb-4"><Inbox className="w-5 h-5" /></div>
               <h2 className="text-4xl font-black text-navy">{isLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-300" /> : data.stats.pendingReviews}</h2>
-              <p className="text-sm font-medium text-gray-500 mt-1">Pending Reviews</p>
+              <p className="text-sm font-medium text-gray-500 mt-1">Global Inbox</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
               <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-500 flex items-center justify-center mb-4"><ClipboardCheck className="w-5 h-5" /></div>
@@ -64,7 +74,7 @@ export default function BAOverview() {
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
               <div className="w-10 h-10 rounded-xl bg-green-50 text-green-500 flex items-center justify-center mb-4"><FileText className="w-5 h-5" /></div>
               <h2 className="text-4xl font-black text-navy">{isLoading ? <Loader2 className="w-6 h-6 animate-spin text-gray-300" /> : data.stats.activeRequirements}</h2>
-              <p className="text-sm font-medium text-gray-500 mt-1">Active Requirements</p>
+              <p className="text-sm font-medium text-gray-500 mt-1">My Active Requirements</p>
             </div>
           </div>
 
@@ -73,7 +83,7 @@ export default function BAOverview() {
             <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
               <div className="flex items-center space-x-3">
                 <Inbox className="w-5 h-5 text-gray-400" />
-                <h3 className="font-bold text-navy">Requirement Inbox</h3>
+                <h3 className="font-bold text-navy">Global Unclaimed Requirements</h3>
                 {!isLoading && data.stats.pendingReviews > 0 && (
                   <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
                     {data.stats.pendingReviews} new
@@ -81,19 +91,18 @@ export default function BAOverview() {
                 )}
               </div>
               <Link to="/ba/inbox" className="text-sm font-bold text-primary flex items-center hover:underline">
-                View All <ArrowRight className="w-4 h-4 ml-1"/>
+                View All & Claim <ArrowRight className="w-4 h-4 ml-1"/>
               </Link>
             </div>
             <div className="divide-y divide-gray-50">
               {isLoading ? (
                 <div className="px-6 py-8 text-center text-gray-500 text-sm flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Syncing...</div>
               ) : data.inbox.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-500 text-sm">You're all caught up! No pending requirements.</div>
+                <div className="px-6 py-8 text-center text-gray-500 text-sm">You're all caught up! No pending requirements in the global inbox.</div>
               ) : (
                 data.inbox.map((item, i) => (
                   <div key={i} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition-colors">
                     <div className="flex items-start space-x-4">
-                      {/* FIXED: Conditionally render the blue dot based on isNew */}
                       {item.isNew ? (
                         <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0 shadow-sm shadow-blue-200 animate-pulse"></div>
                       ) : (
@@ -116,7 +125,7 @@ export default function BAOverview() {
             <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center bg-orange-50/30">
               <div className="flex items-center space-x-3">
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
-                <h3 className="font-bold text-navy">Pending Change Requests</h3>
+                <h3 className="font-bold text-navy">My Pending Change Requests</h3>
                 {!isLoading && data.changeRequests.length > 0 && (
                   <span className="bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
                     {data.changeRequests.length}
@@ -131,7 +140,7 @@ export default function BAOverview() {
               {isLoading ? (
                 <div className="px-6 py-8 text-center text-gray-500 text-sm flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Syncing...</div>
               ) : data.changeRequests.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-500 text-sm">No pending change requests at the moment.</div>
+                <div className="px-6 py-8 text-center text-gray-500 text-sm">No pending change requests in your workspace.</div>
               ) : (
                 data.changeRequests.map((req, i) => (
                   <div key={i} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition-colors">
@@ -183,7 +192,7 @@ export default function BAOverview() {
           {/* VERIFICATION QUEUE */}
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
-              <h3 className="font-bold text-navy">Verification Queue</h3>
+              <h3 className="font-bold text-navy">My Verification Queue</h3>
               <Link to="/ba/verification" className="text-sm font-bold text-primary flex items-center hover:underline">
                 View All <ArrowRight className="w-4 h-4 ml-1"/>
               </Link>
@@ -192,7 +201,7 @@ export default function BAOverview() {
               {isLoading ? (
                 <div className="px-6 py-8 text-center text-gray-500 text-sm flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Syncing...</div>
               ) : data.verificationQueue.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-500 text-sm">No items pending verification at the moment.</div>
+                <div className="px-6 py-8 text-center text-gray-500 text-sm">No items pending verification for your requirements.</div>
               ) : (
                 data.verificationQueue.map((item, i) => (
                   <div key={i} className="px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors">

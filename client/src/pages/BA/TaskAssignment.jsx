@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
-import { Sparkles, ChevronDown, CheckCircle2, User, Loader2, FileText, AlertCircle, Send, Plus } from "lucide-react";
+import { Sparkles, ChevronDown, CheckCircle2, User, Users, Loader2, FileText, AlertCircle, Send, Plus } from "lucide-react";
 
 export default function TaskAssignment() {
   const navigate = useNavigate();
@@ -267,12 +267,13 @@ export default function TaskAssignment() {
             
             {viewMode === 'empty' && (
               <div className="flex-1 flex flex-col items-center justify-center p-8">
-                <div className="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center text-primary mb-6">
-                  <Sparkles className="w-10 h-10" />
+                {/* CHANGED TO USERS ICON & ROUNDED FULL */}
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-primary mb-6">
+                  <Users className="w-10 h-10" />
                 </div>
-                <h3 className="text-lg font-bold text-navy mb-2">AI-Assisted Task Breakdown</h3>
+                <h3 className="text-lg font-bold text-navy mb-2">Task Assignment</h3>
                 <p className="text-sm text-gray-500 mb-8 max-w-md text-center">
-                  Let AI analyze the requirement and suggest a breakdown into technical tasks, or create tasks manually.
+                  Let AI analyze the requirement and suggest a breakdown into technical tasks, or create tasks manually and assign them to your team.
                 </p>
                 <div className="flex space-x-4">
                   <button 

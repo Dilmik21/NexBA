@@ -1,11 +1,19 @@
 // --- IMPORTING OUR NEW MODELS ---
 const { RequirementModel, CommunicationModel, UserModel } = require('../models/ClientModels');
 
+// --- SECURITY MIDDLEWARE ---
+// This acts as a bouncer. If there is no UID, it rejects the request.
+const requireUid = (req, res, next) => {
+  const uid = req.query.uid || req.body.uid;
+  if (!uid) return res.status(401).json({ success: false, message: "Unauthorized: Missing UID" });
+  req.uid = uid;
+  next();
+};
+
 // --- 1. SUBMIT NEW PROJECT ---
 const submitProject = async (req, res) => {
   try {
-    const uid = req.body.uid || req.query.uid; 
-    const customReqId = await RequirementModel.submitProject(req.body, uid);
+    const customReqId = await RequirementModel.submitProject(req.body, req.uid);
     res.json({ success: true, id: customReqId });
   } catch (error) {
     console.error("[Backend Error]:", error);
@@ -16,7 +24,7 @@ const submitProject = async (req, res) => {
 // --- 2. OVERVIEW STATS ---
 const getOverviewStats = async (req, res) => {
   try {
-    const stats = await RequirementModel.getOverviewStats();
+    const stats = await RequirementModel.getOverviewStats(req.uid);
     res.json({ success: true, stats });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -24,7 +32,7 @@ const getOverviewStats = async (req, res) => {
 // --- 3. PROJECT PROGRESS ---
 const getProjectProgress = async (req, res) => {
   try {
-    const requirementsList = await RequirementModel.getProjectProgress();
+    const requirementsList = await RequirementModel.getProjectProgress(req.uid);
     res.json({ success: true, data: { lastUpdated: "Live from Database", requirements: requirementsList } });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -32,7 +40,7 @@ const getProjectProgress = async (req, res) => {
 // --- 4. CHANGE REQUESTS ---
 const getChangeRequests = async (req, res) => {
   try {
-    const requests = await RequirementModel.getChangeRequests();
+    const requests = await RequirementModel.getChangeRequests(req.uid);
     res.json({ success: true, data: requests });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -40,7 +48,7 @@ const getChangeRequests = async (req, res) => {
 // --- 5. ACTION ITEMS ---
 const getActionItems = async (req, res) => {
   try {
-    const items = await RequirementModel.getActionItems();
+    const items = await RequirementModel.getActionItems(req.uid);
     res.json({ success: true, data: items });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -48,7 +56,7 @@ const getActionItems = async (req, res) => {
 // --- 6. RECENT ACTIVITY ---
 const getRecentActivity = async (req, res) => {
   try {
-    const activities = await RequirementModel.getRecentActivity();
+    const activities = await RequirementModel.getRecentActivity(req.uid);
     res.json({ success: true, data: activities });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -58,7 +66,7 @@ const searchRequirements = async (req, res) => {
   try {
     const searchQuery = req.query.q?.toLowerCase() || '';
     if (!searchQuery) return res.json({ success: true, data: [] });
-    const searchResults = await RequirementModel.searchRequirements(searchQuery);
+    const searchResults = await RequirementModel.searchRequirements(searchQuery, req.uid);
     res.json({ success: true, data: searchResults });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -66,7 +74,7 @@ const searchRequirements = async (req, res) => {
 // --- GET ALL REQUESTS FOR THE TABLE ---
 const getAllRequests = async (req, res) => {
   try {
-    const requests = await RequirementModel.getAllRequests();
+    const requests = await RequirementModel.getAllRequests(req.uid);
     res.json({ success: true, data: requests });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -77,7 +85,7 @@ const getAllRequests = async (req, res) => {
 
 const getClarifications = async (req, res) => {
   try {
-    const clarifications = await CommunicationModel.getClarifications();
+    const clarifications = await CommunicationModel.getClarifications(req.uid);
     res.json({ success: true, data: clarifications });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -94,7 +102,7 @@ const answerClarification = async (req, res) => {
 // --- APPROVALS ---
 const getApprovals = async (req, res) => {
   try {
-    const approvals = await RequirementModel.getApprovals();
+    const approvals = await RequirementModel.getApprovals(req.uid);
     res.json({ success: true, data: approvals });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -125,14 +133,14 @@ const requestChangeForRequirement = async (req, res) => {
 // --- MESSAGES ---
 const getMessages = async (req, res) => {
   try {
-    const messages = await CommunicationModel.getMessages();
+    const messages = await CommunicationModel.getMessages(req.uid);
     res.json({ success: true, data: messages });
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
 const sendMessage = async (req, res) => {
   try {
-    const docId = await CommunicationModel.sendMessage(req.body);
+    const docId = await CommunicationModel.sendMessage(req.body, req.uid);
     res.json({ success: true, id: docId });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -140,7 +148,7 @@ const sendMessage = async (req, res) => {
 // --- ARCHIVE ---
 const getArchivedRequirements = async (req, res) => {
   try {
-    const archives = await RequirementModel.getArchivedRequirements();
+    const archives = await RequirementModel.getArchivedRequirements(req.uid);
     res.json({ success: true, data: archives });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -148,36 +156,31 @@ const getArchivedRequirements = async (req, res) => {
 // --- SETTINGS ---
 const getSettings = async (req, res) => {
   try {
-    const { uid } = req.query;
-    if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
-    const settings = await UserModel.getSettings(uid);
+    const settings = await UserModel.getSettings(req.uid);
     res.json({ success: true, data: settings });
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
 const updateGeneralSettings = async (req, res) => {
   try {
-    const { uid } = req.body;
-    if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
-    await UserModel.updateGeneralSettings(uid, req.body);
+    await UserModel.updateGeneralSettings(req.uid, req.body);
     res.json({ success: true, message: "Profile updated successfully" });
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
 const updateSecuritySettings = async (req, res) => {
   try {
-    const { uid, newPassword } = req.body;
-    if (!uid || !newPassword) return res.status(400).json({ success: false, message: "No UID or Password provided" });
-    await UserModel.updateSecuritySettings(uid, newPassword);
+    const { newPassword } = req.body;
+    if (!newPassword) return res.status(400).json({ success: false, message: "No Password provided" });
+    await UserModel.updateSecuritySettings(req.uid, newPassword);
     res.json({ success: true, message: "Password permanently updated in Firebase Auth" });
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
 const updateNotificationSettings = async (req, res) => {
   try {
-    const { uid, key, value } = req.body;
-    if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
-    await UserModel.updateNotificationSettings(uid, key, value);
+    const { key, value } = req.body;
+    await UserModel.updateNotificationSettings(req.uid, key, value);
     res.json({ success: true, message: "Notifications updated successfully" });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -188,23 +191,20 @@ const updateNotificationSettings = async (req, res) => {
 
 const getNotifications = async (req, res) => {
   try {
-    const { uid } = req.query;
-    if (!uid) return res.status(400).json({ success: false, message: "No UID provided" });
-    const { notifications, unreadCount } = await UserModel.getNotifications(uid);
+    const { notifications, unreadCount } = await UserModel.getNotifications(req.uid);
     res.json({ success: true, data: notifications, unreadCount });
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
 const markNotificationsRead = async (req, res) => {
   try {
-    const { uid } = req.body;
-    if (!uid) return res.status(400).json({ success: false });
-    await UserModel.markNotificationsRead(uid);
+    await UserModel.markNotificationsRead(req.uid);
     res.json({ success: true });
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
 module.exports = {
+  requireUid, // Exported so you can use it in your route definitions!
   submitProject, getOverviewStats, getProjectProgress, getChangeRequests, 
   getActionItems, getRecentActivity, searchRequirements, getAllRequests,
   getClarifications, answerClarification, getApprovals, approveRequirement,

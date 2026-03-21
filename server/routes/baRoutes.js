@@ -1,25 +1,46 @@
 const express = require('express');
 const router = express.Router();
-const baController = require('../controllers/baController');
 
-router.get('/overview', baController.getDashboardOverview);
-router.get('/search', baController.searchAllItems);
-router.get('/inbox', baController.getInboxRequirements);
+// Destructuring everything from the controller for cleaner route definitions
+const { 
+  requireBaId,
+  getDashboardOverview,
+  searchAllItems,
+  getInboxRequirements,
+  claimRequirement,
+  getAnalyzedHistory,
+  processRequirementWithAI,
+  regenerateRequirementWithAI,
+  saveEditedAIAnalysis,
+  getReqClarifications,
+  sendClarificationQuestions,
+  getReadyRequirements,
+  getDevelopers,
+  generateTasksWithAI,
+  saveAssignedTasks
+} = require('../controllers/baController');
 
-// --- AI ANALYSIS ROUTES ---
-router.get('/history', baController.getAnalyzedHistory); 
-router.post('/analyze/:id', baController.processRequirementWithAI);
-router.post('/analyze/:id/regenerate', baController.regenerateRequirementWithAI); 
-router.put('/analyze/:id', baController.saveEditedAIAnalysis); 
+// --- 1. OVERVIEW, INBOX & CLAIMING ---
+// The requireBaId middleware acts as a bouncer for every single route!
+router.get('/overview', requireBaId, getDashboardOverview);
+router.get('/search', requireBaId, searchAllItems);
+router.get('/inbox', requireBaId, getInboxRequirements);
+router.post('/claim/:id', requireBaId, claimRequirement); // <-- NEW CLAIM ROUTE!
 
-// --- CLARIFICATION ROUTES ---
-router.get('/analyze/:id/clarifications', baController.getReqClarifications);
-router.post('/clarifications/send', baController.sendClarificationQuestions);
+// --- 2. AI ANALYSIS ROUTES ---
+router.get('/history', requireBaId, getAnalyzedHistory); 
+router.post('/analyze/:id', requireBaId, processRequirementWithAI);
+router.post('/analyze/:id/regenerate', requireBaId, regenerateRequirementWithAI); 
+router.put('/analyze/:id', requireBaId, saveEditedAIAnalysis); 
 
-// --- TASK & ASSIGNMENT ROUTES (NEW) ---
-router.get('/tasks/ready-requirements', baController.getReadyRequirements); // Fetch requirements processed by AI
-router.get('/tasks/developers', baController.getDevelopers); // Fetch developers & workloads
-router.post('/tasks/generate/:reqId', baController.generateTasksWithAI); // Use OpenAI to break into tasks
-router.post('/tasks/assign', baController.saveAssignedTasks); // Save tasks to DB
+// --- 3. CLARIFICATION ROUTES ---
+router.get('/analyze/:id/clarifications', requireBaId, getReqClarifications);
+router.post('/clarifications/send', requireBaId, sendClarificationQuestions);
+
+// --- 4. TASK & ASSIGNMENT ROUTES ---
+router.get('/tasks/ready-requirements', requireBaId, getReadyRequirements); 
+router.get('/tasks/developers', requireBaId, getDevelopers); 
+router.post('/tasks/generate/:reqId', requireBaId, generateTasksWithAI); 
+router.post('/tasks/assign', requireBaId, saveAssignedTasks); 
 
 module.exports = router;

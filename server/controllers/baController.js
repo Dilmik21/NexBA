@@ -1,10 +1,19 @@
 // --- IMPORTING OUR NEW BA MODELS ---
 const { BARequirementModel, BATaskModel, BACommunicationModel } = require('../models/BAModels');
 
-// --- 1. OVERVIEW & INBOX ---
+// --- SECURITY MIDDLEWARE ---
+// Acts as a bouncer. Rejects any request that doesn't include the BA's UID.
+const requireBaId = (req, res, next) => {
+  const baId = req.query.uid || req.body.uid;
+  if (!baId) return res.status(401).json({ success: false, message: "Unauthorized BA: Missing UID" });
+  req.baId = baId;
+  next();
+};
+
+// --- 1. OVERVIEW, INBOX & CLAIMING ---
 const getDashboardOverview = async (req, res) => {
   try {
-    const dashboardData = await BARequirementModel.getDashboardData();
+    const dashboardData = await BARequirementModel.getDashboardData(req.baId);
     res.json({ success: true, data: dashboardData });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -16,11 +25,23 @@ const getInboxRequirements = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+const claimRequirement = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { baName } = req.body;
+    await BARequirementModel.claimRequirement(id, req.baId, baName || "Unknown BA");
+    res.json({ success: true, message: "Requirement claimed successfully" });
+  } catch (error) { 
+    if (error.message === "Not found") return res.status(404).json({ success: false, message: "Requirement not found" });
+    res.status(500).json({ success: false }); 
+  }
+};
+
 const searchAllItems = async (req, res) => {
   try {
     const rawQuery = req.query.q || '';
     if (!rawQuery.trim()) return res.json({ success: true, data: [] });
-    const searchResults = await BARequirementModel.search(rawQuery);
+    const searchResults = await BARequirementModel.search(rawQuery, req.baId);
     res.json({ success: true, data: searchResults });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -28,7 +49,7 @@ const searchAllItems = async (req, res) => {
 // --- 2. AI REQUIREMENT PROCESSING ---
 const getAnalyzedHistory = async (req, res) => {
   try {
-    const history = await BARequirementModel.getHistory();
+    const history = await BARequirementModel.getHistory(req.baId);
     res.json({ success: true, data: history });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -119,7 +140,7 @@ const saveEditedAIAnalysis = async (req, res) => {
 // --- 3. CLARIFICATIONS ---
 const sendClarificationQuestions = async (req, res) => {
   try {
-    await BACommunicationModel.sendClarificationQuestions(req.body.reqId, req.body.questions);
+    await BACommunicationModel.sendClarificationQuestions(req.body.reqId, req.body.questions, req.baId, req.body.baName || "Your BA");
     res.json({ success: true });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -134,7 +155,7 @@ const getReqClarifications = async (req, res) => {
 // --- 4. TASK GENERATION & ASSIGNMENT ---
 const getReadyRequirements = async (req, res) => {
   try {
-    const data = await BATaskModel.getReadyRequirements();
+    const data = await BATaskModel.getReadyRequirements(req.baId);
     res.json({ success: true, data: data.reqs, globalTaskCount: data.globalTaskCount });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -180,7 +201,8 @@ const saveAssignedTasks = async (req, res) => {
 };
 
 module.exports = { 
-  getDashboardOverview, getInboxRequirements, searchAllItems, getAnalyzedHistory, 
+  requireBaId,
+  getDashboardOverview, getInboxRequirements, claimRequirement, searchAllItems, getAnalyzedHistory, 
   processRequirementWithAI, regenerateRequirementWithAI, saveEditedAIAnalysis, 
   sendClarificationQuestions, getReqClarifications,
   getReadyRequirements, getDevelopers, generateTasksWithAI, saveAssignedTasks

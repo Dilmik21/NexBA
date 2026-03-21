@@ -2,53 +2,79 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
-import { LayoutGrid, List, FileText, File, Calendar, User, ArrowRight, Loader2, Inbox } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { LayoutGrid, List, FileText, File, Calendar, User, ArrowRight, Loader2, Inbox, UserPlus } from "lucide-react";
 
 export default function RequirementInbox() {
+  const { currentUser, userData } = useAuth();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState("cards"); 
   const [requirements, setRequirements] = useState([]);
   const [selectedReq, setSelectedReq] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isClaiming, setIsClaiming] = useState(false);
+
+  const fetchInbox = async () => {
+    if (!currentUser) return;
+    try {
+      const response = await fetch(`http://localhost:5000/api/ba/inbox?uid=${currentUser.uid}`);
+      const json = await response.json();
+      if (json.success) {
+        setRequirements(json.data);
+        if (json.data.length > 0) setSelectedReq(json.data[0]);
+        else setSelectedReq(null);
+      }
+    } catch (error) {
+      console.error("Error fetching inbox:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchInbox = async () => {
-      try {
-        const response = await fetch("http://localhost:5000/api/ba/inbox");
-        const json = await response.json();
-        if (json.success) {
-          setRequirements(json.data);
-          if (json.data.length > 0) setSelectedReq(json.data[0]);
-        }
-      } catch (error) {
-        console.error("Error fetching inbox:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchInbox();
-  }, []);
+  }, [currentUser]);
 
   const handleCardClick = (req) => {
     setSelectedReq(req);
     setViewMode("list");
   };
 
-  const handleProcessAI = (reqId) => {
-    navigate(`/ba/analysis?reqId=${reqId}`);
+  const handleClaimAndProcess = async (reqId) => {
+    setIsClaiming(true);
+    try {
+      const baName = userData?.fullName || "Bhashi Fernando";
+      const res = await fetch(`http://localhost:5000/api/ba/claim/${reqId}?uid=${currentUser.uid}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baName })
+      });
+      
+      const json = await res.json();
+      if (json.success) {
+        navigate(`/ba/analysis?reqId=${reqId}`);
+      } else {
+        alert("Failed to claim. Another BA might have already grabbed this requirement!");
+        fetchInbox(); 
+      }
+    } catch (error) {
+      console.error("Failed to claim requirement:", error);
+      alert("Network error while claiming requirement.");
+    }
+    setIsClaiming(false);
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#F5F7FA]">
         <BATopBar />
-        <div className="flex max-w-[1600px] mx-auto pt-6 px-6 gap-8">
+        <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
           <div className="hidden lg:block flex-shrink-0">
             <BASidebar />
           </div>
           <div className="flex-1 pb-10 flex flex-col items-center justify-center h-[calc(100vh-100px)]">
             <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-            <p className="text-gray-500 font-medium">Syncing Inbox...</p>
+            <p className="text-gray-500 font-medium">Syncing Requirement Inbox...</p>
           </div>
         </div>
       </div>
@@ -59,21 +85,22 @@ export default function RequirementInbox() {
     <div className="min-h-screen bg-[#F5F7FA]">
       <BATopBar />
 
-      <div className="flex max-w-[1600px] mx-auto pt-6 px-6 gap-8">
+      <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
         <div className="hidden lg:block flex-shrink-0">
           <BASidebar />
         </div>
 
-        <div className="flex-1 pb-10 flex flex-col h-[calc(100vh-100px)]">
+        {/* Removed fixed height constraint so mobile can scroll normally when stacked */}
+        <div className="flex-1 pb-10 flex flex-col h-full lg:h-[calc(100vh-100px)]">
           
           {/* HEADER & TOGGLE */}
-          <div className="flex justify-between items-end mb-6 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-6 flex-shrink-0 gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-navy">Requirement Inbox</h1>
-              <p className="text-gray-500 mt-1 text-sm">{requirements.length} requirements available.</p>
+              <h1 className="text-2xl font-bold text-navy">Global Inbox</h1>
+              <p className="text-gray-500 mt-1 text-sm">{requirements.length} unclaimed requirements available.</p>
             </div>
             
-            <div className="flex bg-white rounded-xl shadow-sm border border-gray-100 p-1">
+            <div className="flex bg-white rounded-xl shadow-sm border border-gray-100 p-1 self-start sm:self-auto">
               <button 
                 onClick={() => setViewMode("cards")}
                 className={`flex items-center px-4 py-2 rounded-lg text-sm font-semibold transition-all ${viewMode === "cards" ? "bg-blue-50 text-primary" : "text-gray-500 hover:text-navy"}`}
@@ -91,14 +118,16 @@ export default function RequirementInbox() {
 
           {requirements.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 py-20">
-              <Inbox className="w-16 h-16 text-gray-200 mb-4" />
-              <h2 className="text-xl font-bold text-navy">Inbox is Empty</h2>
-              <p className="text-gray-500 mt-2">You have no requirements to review.</p>
+              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                <Inbox className="w-10 h-10 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold text-navy">Inbox Zero!</h2>
+              <p className="text-gray-500 mt-2 text-center px-4">All client requirements have been claimed by your team.</p>
             </div>
           ) : viewMode === "cards" ? (
             
             /* CARDS VIEW */
-            <div className="flex-1 overflow-y-auto pr-4 pb-4">
+            <div className="flex-1 overflow-y-auto lg:pr-4 pb-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {requirements.map((req) => (
                   <div 
@@ -116,7 +145,6 @@ export default function RequirementInbox() {
                           {req.priority}
                         </span>
                       </div>
-                      {/* The dot ONLY shows if it is truly NEW */}
                       {req.isNew && (
                         <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]"></div>
                       )}
@@ -140,12 +168,13 @@ export default function RequirementInbox() {
 
           ) : (
 
-            /* LIST VIEW */
-            <div className="flex gap-6 flex-1 min-h-0">
+            /* LIST VIEW (Now fully responsive: stacks on mobile, side-by-side on desktop) */
+            <div className="flex flex-col lg:flex-row gap-6 flex-1 lg:min-h-0">
               
-              <div className="w-80 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+              {/* LEFT PANE - Full width on mobile, fixed width on desktop */}
+              <div className="w-full lg:w-80 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-shrink-0 h-[350px] lg:h-auto">
                 <div className="p-4 border-b border-gray-50 flex items-center text-gray-500 font-semibold text-sm flex-shrink-0">
-                  <Inbox className="w-4 h-4 mr-2" /> All Requests ({requirements.length})
+                  <Inbox className="w-4 h-4 mr-2" /> Unassigned ({requirements.length})
                 </div>
                 <div className="overflow-y-auto flex-1 p-2 space-y-1">
                   {requirements.map(req => (
@@ -156,7 +185,6 @@ export default function RequirementInbox() {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          {/* Conditional blue dot */}
                           {req.isNew ? (
                             <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                           ) : (
@@ -176,11 +204,12 @@ export default function RequirementInbox() {
                 </div>
               </div>
 
+              {/* RIGHT PANE - Full flex on both mobile and desktop */}
               {selectedReq && (
-                <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col min-h-0">
+                <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col min-h-[500px] lg:min-h-0">
                   
-                  <div className="p-8 border-b border-gray-50 flex-shrink-0">
-                    <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-6 md:p-8 border-b border-gray-50 flex-shrink-0">
+                    <div className="flex flex-wrap items-center gap-3 mb-4">
                       <span className="text-sm font-bold text-gray-400">{selectedReq.id}</span>
                       <span className={`text-xs font-bold px-2 py-1 rounded-md ${selectedReq.priority === 'High' ? 'bg-red-50 text-red-600' : selectedReq.priority === 'Medium' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{selectedReq.priority}</span>
                       <span className={`flex items-center text-xs font-bold px-2 py-1 rounded-md ${selectedReq.type === 'Text' ? 'bg-blue-50 text-primary' : 'bg-orange-50 text-orange-600'}`}>
@@ -188,16 +217,16 @@ export default function RequirementInbox() {
                         {selectedReq.type === 'Text' ? 'Text Requirement' : 'Document Requirement'}
                       </span>
                     </div>
-                    <h2 className="text-2xl font-black text-navy mb-4">{selectedReq.title}</h2>
-                    <div className="flex items-center text-sm text-gray-500 space-x-6">
+                    <h2 className="text-xl md:text-2xl font-black text-navy mb-4 leading-snug">{selectedReq.title}</h2>
+                    <div className="flex flex-wrap items-center text-sm text-gray-500 gap-y-2 gap-x-4 md:gap-x-6">
                       <span className="flex items-center"><User className="w-4 h-4 mr-2 text-gray-400"/> {selectedReq.submitter}</span>
-                      <span>—</span>
+                      <span className="hidden md:inline">—</span>
                       <span className="font-medium text-gray-600">{selectedReq.company}</span>
-                      <span className="flex items-center"><Calendar className="w-4 h-4 mr-2 text-gray-400 ml-4"/> {selectedReq.fullDate}</span>
+                      <span className="flex items-center w-full md:w-auto"><Calendar className="w-4 h-4 mr-2 text-gray-400"/> {selectedReq.fullDate}</span>
                     </div>
                   </div>
 
-                  <div className="p-8 flex-1 overflow-y-auto">
+                  <div className="p-6 md:p-8 flex-1 overflow-y-auto">
                     <h3 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wider">
                       {selectedReq.type === 'Text' ? 'Original Requirement Text' : 'Uploaded Document'}
                     </h3>
@@ -207,37 +236,32 @@ export default function RequirementInbox() {
                         {selectedReq.description}
                       </div>
                     ) : (
-                      <div className="bg-[#F7F9FC] p-6 rounded-2xl border border-gray-100 flex items-center justify-between mb-6">
+                      <div className="bg-[#F7F9FC] p-4 md:p-6 rounded-2xl border border-gray-100 flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                         <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
+                          <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center flex-shrink-0">
                             <FileText className="w-6 h-6" />
                           </div>
-                          <div>
-                            <p className="font-bold text-navy text-sm">{selectedReq.fileName}</p>
+                          <div className="min-w-0">
+                            <p className="font-bold text-navy text-sm truncate">{selectedReq.fileName}</p>
                             <p className="text-xs text-gray-500 mt-1">PDF • Uploaded {selectedReq.fullDate}</p>
                           </div>
                         </div>
-                        <button className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm">
+                        <button className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm w-full md:w-auto">
                           Preview
                         </button>
                       </div>
                     )}
 
-                    <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 flex">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 text-primary flex items-center justify-center flex-shrink-0 mr-4">
-                        <Inbox className="w-5 h-5" />
+                    <div className="bg-blue-50/50 p-5 md:p-6 rounded-2xl border border-blue-100 flex items-start">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 text-primary flex items-center justify-center flex-shrink-0 mr-4 mt-0.5">
+                        <UserPlus className="w-5 h-5" />
                       </div>
                       <div>
-                        {/* Intelligent text depending on if it has been processed yet! */}
                         <h4 className="font-bold text-primary text-sm mb-1">
-                          {selectedReq.isNew ? "Next Step" : "AI Analysis Available"}
+                          Unassigned Requirement
                         </h4>
-                        <p className="text-sm text-blue-900/70">
-                          {selectedReq.isNew 
-                            ? (selectedReq.type === 'Text' 
-                                ? "Process this requirement through AI Analysis to generate a summary, detect ambiguities, and build clarification questions."
-                                : "This requirement was submitted as a document. Process it through AI Analysis to extract text via OCR and generate a structured summary.")
-                            : "This requirement has been analyzed by NexBA AI. Click below to view the extracted software constraints and ambiguous terms."}
+                        <p className="text-sm text-blue-900/70 leading-relaxed">
+                          This requirement is waiting in the global inbox. Claim it to move it to your personal workspace and begin the AI Analysis process.
                         </p>
                       </div>
                     </div>
@@ -245,11 +269,13 @@ export default function RequirementInbox() {
 
                   <div className="p-6 border-t border-gray-50 flex justify-end items-center flex-shrink-0 bg-white rounded-b-3xl">
                     <button 
-                      onClick={() => handleProcessAI(selectedReq.id)}
-                      className="bg-primary hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl font-bold text-sm transition-colors shadow-[0_4px_14px_0_rgba(10,102,194,0.39)] hover:shadow-[0_6px_20px_rgba(10,102,194,0.23)] flex items-center"
+                      onClick={() => handleClaimAndProcess(selectedReq.id)}
+                      disabled={isClaiming}
+                      className="w-full md:w-auto justify-center bg-primary hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl font-bold text-sm transition-colors shadow-[0_4px_14px_0_rgba(10,102,194,0.39)] hover:shadow-[0_6px_20px_rgba(10,102,194,0.23)] flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {/* Smart button text! */}
-                      {selectedReq.isNew ? "Process with AI" : "View AI Analysis"} <ArrowRight className="w-4 h-4 ml-2" />
+                      {isClaiming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      {isClaiming ? "Claiming..." : "Claim & Analyze"} 
+                      {!isClaiming && <ArrowRight className="w-4 h-4 ml-2" />}
                     </button>
                   </div>
 

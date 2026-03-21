@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import ClientTopBar from "../../components/Client/ClientTopBar";
 import ClientSidebar from "../../components/Client/ClientSidebar";
-import { Sparkles, User, Paperclip, Send, Loader2, MessageSquare, CheckCircle2, FileText, X } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext"; 
+import { User, Paperclip, Send, Loader2, MessageSquare, CheckCircle2, FileText, X } from "lucide-react";
 
 export default function ClientClarifications() {
+  const { currentUser } = useAuth(); 
   const [questions, setQuestions] = useState([]);
+  const [hasHistory, setHasHistory] = useState(false); 
   const [selectedQuestion, setSelectedQuestion] = useState(null);
   
   const [answerText, setAnswerText] = useState("");
@@ -15,15 +18,19 @@ export default function ClientClarifications() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchClarifications();
-  }, []);
+    if (currentUser) {
+      fetchClarifications();
+    }
+  }, [currentUser]);
 
   const fetchClarifications = async () => {
+    setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:5000/api/client/clarifications");
+      const response = await fetch(`http://localhost:5000/api/client/clarifications?uid=${currentUser.uid}`);
       const json = await response.json();
       if (json.success) {
-        // Only show questions that still need an answer!
+        setHasHistory(json.data.length > 0);
+
         const pendingQuestions = json.data.filter(q => q.status === "Pending Client");
         setQuestions(pendingQuestions);
         
@@ -75,7 +82,6 @@ export default function ClientClarifications() {
         fileData: attachedFile ? attachedFile.data : null
       };
 
-      // FIXED: Changed method to "POST" to perfectly match your backend routes!
       const response = await fetch(`http://localhost:5000/api/client/clarifications/${selectedQuestion.id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,11 +90,9 @@ export default function ClientClarifications() {
       const json = await response.json();
       
       if (json.success) {
-        // Remove the answered question from the list immediately!
         const remainingQuestions = questions.filter(q => q.id !== selectedQuestion.id);
         setQuestions(remainingQuestions);
         
-        // Auto-select the next question, or clear the screen if done
         if (remainingQuestions.length > 0) {
           setSelectedQuestion(remainingQuestions[0]);
         } else {
@@ -120,8 +124,13 @@ export default function ClientClarifications() {
   };
 
   const getPriorityBadge = (priority) => {
-    if (priority === 'Urgent' || priority === 'High') return <span className="bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded">Urgent</span>;
-    if (priority === 'Medium') return <span className="bg-yellow-50 text-yellow-600 text-[10px] font-bold px-2 py-0.5 rounded">Medium</span>;
+    const p = priority || 'Medium'; 
+    if (p === 'Urgent' || p === 'High') {
+      return <span className="bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded">High</span>;
+    }
+    if (p === 'Medium') {
+      return <span className="bg-yellow-50 text-yellow-600 text-[10px] font-bold px-2 py-0.5 rounded">Medium</span>;
+    }
     return <span className="bg-gray-50 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded">Low</span>;
   };
 
@@ -129,12 +138,14 @@ export default function ClientClarifications() {
     <div className="min-h-screen bg-[#F5F7FA]">
       <ClientTopBar />
 
-      <div className="flex max-w-[1600px] mx-auto pt-6 px-6 gap-8">
+      {/* Added responsive padding px-4 md:px-6 */}
+      <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
         <div className="hidden lg:block flex-shrink-0">
           <ClientSidebar />
         </div>
 
-        <div className="flex-1 pb-10 flex flex-col h-[calc(100vh-100px)]">
+        {/* Removed fixed height constraint for mobile scrolling */}
+        <div className="flex-1 pb-10 flex flex-col h-full lg:h-[calc(100vh-100px)]">
           
           <div className="mb-6 flex-shrink-0">
             <h1 className="text-[22px] font-bold text-navy">Clarifications</h1>
@@ -143,10 +154,11 @@ export default function ClientClarifications() {
             </p>
           </div>
 
-          <div className="flex gap-6 flex-1 min-h-0">
+          {/* flex-col on mobile, flex-row on desktop */}
+          <div className="flex flex-col lg:flex-row gap-6 flex-1 lg:min-h-0">
             
-            {/* LEFT PANE - LIST */}
-            <div className="w-[350px] bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-shrink-0">
+            {/* LEFT PANE - LIST: Full width and capped height on mobile */}
+            <div className="w-full lg:w-[350px] bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-shrink-0 h-[350px] lg:h-auto">
               <div className="p-5 border-b border-gray-50 font-bold text-[13px] text-gray-500 bg-gray-50/30">
                 Action Items ({questions.length})
               </div>
@@ -159,9 +171,19 @@ export default function ClientClarifications() {
                   </div>
                 ) : questions.length === 0 ? (
                   <div className="p-8 text-center text-gray-400">
-                    <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-green-400 opacity-50" />
-                    <p className="font-bold text-navy">All Caught Up!</p>
-                    <p className="text-sm mt-1 text-gray-400">You have answered all questions.</p>
+                    {hasHistory ? (
+                      <>
+                        <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-primary opacity-50" />
+                        <p className="font-bold text-navy">All Caught Up!</p>
+                        <p className="text-sm mt-1 text-gray-400">You have answered all questions.</p>
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare className="w-12 h-12 mx-auto mb-4 text-primary opacity-50" />
+                        <p className="font-bold text-navy">No Questions Yet</p>
+                        <p className="text-[13px] mt-1 text-gray-400">Your BA hasn't asked anything.</p>
+                      </>
+                    )}
                   </div>
                 ) : (
                   questions.map(q => (
@@ -173,15 +195,9 @@ export default function ClientClarifications() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
                           <span className="text-[11px] font-bold text-gray-400">{q.reqId}</span>
-                          {q.isAI ? (
-                            <span className="flex items-center bg-purple-50 text-purple-600 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                              <Sparkles className="w-2.5 h-2.5 mr-1" /> AI
-                            </span>
-                          ) : (
-                            <span className="flex items-center bg-blue-50 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
-                              <User className="w-2.5 h-2.5 mr-1" /> BA
-                            </span>
-                          )}
+                          <span className="flex items-center bg-blue-50 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            <User className="w-2.5 h-2.5 mr-1" /> BA
+                          </span>
                         </div>
                         {getPriorityBadge(q.priority)}
                       </div>
@@ -193,12 +209,11 @@ export default function ClientClarifications() {
               </div>
             </div>
 
-            {/* RIGHT PANE - DETAIL VIEW */}
+            {/* RIGHT PANE - DETAIL VIEW: Expands to fit content on mobile */}
             {selectedQuestion ? (
-              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col min-h-0">
+              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col min-h-[500px] lg:min-h-0">
                 
-                {/* Header */}
-                <div className="p-8 border-b border-gray-50 flex-shrink-0">
+                <div className="p-6 md:p-8 border-b border-gray-50 flex-shrink-0">
                   <div className="flex items-center space-x-3 mb-4">
                     <span className="text-[11px] font-bold text-gray-400">{selectedQuestion.reqId}</span>
                     {getPriorityBadge(selectedQuestion.priority)}
@@ -207,28 +222,26 @@ export default function ClientClarifications() {
                   <p className="text-[13px] text-gray-400">Question from {selectedQuestion.baName}</p>
                 </div>
 
-                {/* Scrollable Content */}
-                <div className="p-8 flex-1 overflow-y-auto bg-gray-50/30">
+                <div className="p-6 md:p-8 flex-1 overflow-y-auto bg-gray-50/30">
                   
                   <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Regarding</h3>
                   <div className="bg-[#F8FAFC] p-5 rounded-[16px] text-[#475569] text-[14px] leading-relaxed italic border border-gray-100 mb-8 line-clamp-3">
                     "{selectedQuestion.regarding}"
                   </div>
 
-                  <div className="bg-white p-6 rounded-[16px] border border-purple-100 shadow-sm relative group flex items-start border-l-[4px] border-l-purple-500 mb-8">
-                    <div className="w-8 h-8 bg-purple-50 rounded-full flex items-center justify-center flex-shrink-0 mr-4">
-                      <Sparkles className="w-4 h-4 text-purple-600" />
+                  <div className="bg-white p-6 rounded-[16px] border border-blue-100 shadow-sm relative group flex items-start border-l-[4px] border-l-primary mb-8">
+                    <div className="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-shrink-0 mr-4">
+                      <User className="w-4 h-4 text-primary" />
                     </div>
                     <div>
                       <div className="flex items-center mb-1">
                         <span className="text-[12px] font-bold text-navy mr-2">{selectedQuestion.baName}</span>
-                        <span className="text-[11px] text-purple-600 font-medium bg-purple-50 px-2 py-0.5 rounded">AI Generated Question</span>
+                        <span className="text-[11px] text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded">Question</span>
                       </div>
                       <p className="text-[15px] text-navy font-medium leading-relaxed mt-2">{selectedQuestion.question}</p>
                     </div>
                   </div>
 
-                  {/* Response Area */}
                   <div>
                     <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Your Response</h3>
                     
@@ -259,17 +272,17 @@ export default function ClientClarifications() {
                         </div>
                       )}
 
-                      <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-between items-center">
+                      <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                         <button 
                           onClick={() => fileInputRef.current.click()}
-                          className="flex items-center text-[13px] font-semibold text-gray-500 hover:text-primary transition-colors"
+                          className="flex items-center text-[13px] font-semibold text-gray-500 hover:text-primary transition-colors justify-center sm:justify-start"
                         >
                           <Paperclip className="w-4 h-4 mr-2" /> Attach File
                         </button>
                         <button 
                           onClick={handleSendAnswer}
                           disabled={!answerText.trim() || isSubmitting}
-                          className="bg-gray-200 hover:bg-primary hover:text-white text-gray-600 text-[13px] font-bold px-6 py-2.5 rounded-full transition-all flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full sm:w-auto justify-center bg-gray-200 hover:bg-primary hover:text-white text-gray-600 text-[13px] font-bold px-6 py-2.5 rounded-full transition-all flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />} 
                           Send Answer
@@ -281,10 +294,24 @@ export default function ClientClarifications() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col items-center justify-center text-gray-400">
-                <CheckCircle2 className="w-16 h-16 mb-4 text-green-400 opacity-40" />
-                <h3 className="font-bold text-navy text-xl">You're all caught up!</h3>
-                <p className="mt-2 text-sm text-gray-500">There are no pending questions for you to review.</p>
+              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col items-center justify-center text-gray-400 py-20 lg:py-0">
+                {hasHistory ? (
+                  <>
+                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-primary mb-6 shadow-sm">
+                      <CheckCircle2 className="w-10 h-10" />
+                    </div>
+                    <h3 className="font-bold text-navy text-xl">You're all caught up!</h3>
+                    <p className="mt-2 text-sm text-gray-500 px-4 text-center">There are no pending questions for you to review.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-primary mb-6 shadow-sm">
+                      <MessageSquare className="w-10 h-10" />
+                    </div>
+                    <h3 className="font-bold text-navy text-xl">No Clarifications Yet</h3>
+                    <p className="mt-2 text-sm text-gray-500 px-4 text-center">When your BA needs more details, their questions will appear here.</p>
+                  </>
+                )}
               </div>
             )}
             

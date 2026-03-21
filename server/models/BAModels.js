@@ -1,6 +1,5 @@
 const { admin, db } = require('../config/firebase');
 
-// --- SMART HELPERS ---
 const getTimeAgo = (timestamp) => {
   if (!timestamp) return "Just now";
   const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -41,9 +40,9 @@ const getChangeRisk = (data) => {
 };
 
 class BARequirementModel {
-  static async getDashboardData() {
+  static async getDashboardData(baId) {
     const [reqSnapshot, devsSnapshot, tasksSnapshot, messagesSnapshot] = await Promise.all([
-      db.collection('requirements').get(),
+      db.collection('requirements').get(), 
       db.collection('users').where('role', '==', 'Developer').get(),
       db.collection('tasks').get().catch(() => ({ empty: true, forEach: () => {} })), 
       db.collection('messages').where('senderRole', '==', 'Developer').get().catch(() => ({ empty: true, forEach: () => {} })) 
@@ -78,29 +77,36 @@ class BARequirementModel {
       const rawReqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
       const clientName = getClientName(data);
       
-      if (data.status === "Pending BA Review") {
+      // STRICT CHECK: Ensure legacy missing fields don't cause ghosting
+      const dbBaId = data.baId || ""; 
+      const isUnassigned = dbBaId === "";
+      const isMine = baId && dbBaId === baId; // MUST exactly match the logged-in BA
+
+      if (data.status === "Pending BA Review" && isUnassigned) {
         pendingReviews++; 
         rawInbox.push({ id: rawReqId, title: data.title || "Untitled Request", client: clientName, rawDate: data.submittedAt || 0, time: getTimeAgo(data.submittedAt), isNew: true });
       }
 
-      if (data.status === "Modification Requested") {
-        const changeRisk = getChangeRisk(data);
-        if (changeRisk === "High") criticalRisks++;
-        rawChangeRequests.push({ id: rawReqId, title: data.lastChangeType ? `${data.lastChangeType} — "${data.title}"` : `Change Request — "${data.title}"`, from: clientName, time: getTimeAgo(data.changeRequestedAt || data.submittedAt), risk: changeRisk, rawDate: data.changeRequestedAt || data.submittedAt || 0 });
-      }
-      
-      if (data.status === "Awaiting Verification" || data.status === "Pending Verification") {
-        verificationQueueCount++;
-        rawVerificationQueue.push({ id: rawReqId, title: data.title || "Untitled Update", dev: data.developerName || data.assignedTo || "Unknown Developer", date: formatShortDate(data.verificationSubmittedAt || data.submittedAt), rawDate: data.verificationSubmittedAt || data.submittedAt || 0 });
-      }
-
-      if (inProgressStatuses.includes(data.status)) {
-        let isFullyFinished = false;
-        const reqTasks = reqTaskStatusMap[rawReqId];
-        if (reqTasks && reqTasks.length > 0) {
-          isFullyFinished = reqTasks.every(status => ['Client Accepted', 'Completed', 'Done'].includes(status));
+      if (isMine) {
+        if (data.status === "Modification Requested") {
+          const changeRisk = getChangeRisk(data);
+          if (changeRisk === "High") criticalRisks++;
+          rawChangeRequests.push({ id: rawReqId, title: data.lastChangeType ? `${data.lastChangeType} — "${data.title}"` : `Change Request — "${data.title}"`, from: clientName, time: getTimeAgo(data.changeRequestedAt || data.submittedAt), risk: changeRisk, rawDate: data.changeRequestedAt || data.submittedAt || 0 });
         }
-        if (!isFullyFinished) activeReqs++;
+        
+        if (data.status === "Awaiting Verification" || data.status === "Pending Verification") {
+          verificationQueueCount++;
+          rawVerificationQueue.push({ id: rawReqId, title: data.title || "Untitled Update", dev: data.developerName || data.assignedTo || "Unknown Developer", date: formatShortDate(data.verificationSubmittedAt || data.submittedAt), rawDate: data.verificationSubmittedAt || data.submittedAt || 0 });
+        }
+
+        if (inProgressStatuses.includes(data.status)) {
+          let isFullyFinished = false;
+          const reqTasks = reqTaskStatusMap[rawReqId];
+          if (reqTasks && reqTasks.length > 0) {
+            isFullyFinished = reqTasks.every(status => ['Client Accepted', 'Completed', 'Done'].includes(status));
+          }
+          if (!isFullyFinished) activeReqs++;
+        }
       }
     });
 
@@ -137,9 +143,13 @@ class BARequirementModel {
     let inbox = [];
     reqSnapshot.forEach(doc => {
       const data = doc.data();
-      inbox.push({
-        dbId: doc.id, id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, title: data.title || 'Untitled Requirement', description: data.description || data.text || 'No description provided.', submitter: getClientName(data), company: data.company || data.companyName || 'Cargills Corporation', priority: getPriority(data), type: (data.fileUrl || data.fileName || data.attachments || data.type === 'File') ? 'File' : 'Text', fileName: data.fileName || 'document.pdf', fileUrl: data.fileUrl || null, fullDate: formatFullDate(data.submittedAt), timeAgo: getTimeAgo(data.submittedAt), rawDate: data.submittedAt || 0, status: data.status || 'Pending BA Review', isNew: data.status === 'Pending BA Review' 
-      });
+      const isUnassigned = !data.baId || data.baId === "";
+      
+      if (isUnassigned) {
+        inbox.push({
+          dbId: doc.id, id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, title: data.title || 'Untitled Requirement', description: data.description || data.text || 'No description provided.', submitter: getClientName(data), company: data.company || data.companyName || 'Cargills Corporation', priority: getPriority(data), type: (data.fileUrl || data.fileName || data.attachments || data.type === 'File') ? 'File' : 'Text', fileName: data.fileName || 'document.pdf', fileUrl: data.fileUrl || null, fullDate: formatFullDate(data.submittedAt), timeAgo: getTimeAgo(data.submittedAt), rawDate: data.submittedAt || 0, status: data.status || 'Pending BA Review', isNew: data.status === 'Pending BA Review' 
+        });
+      }
     });
     inbox.sort((a, b) => {
       if (a.isNew && !b.isNew) return -1;
@@ -149,22 +159,35 @@ class BARequirementModel {
     return inbox;
   }
 
-  static async search(query) {
+  static async claimRequirement(reqId, baId, baName) {
+    const reqDoc = await this.getRequirementByReqId(reqId);
+    if (!reqDoc) throw new Error("Not found");
+    
+    await reqDoc.ref.update({
+      baId: baId,
+      baName: baName,
+      status: "In Analysis" 
+    });
+  }
+
+  static async search(query, baId) {
     const cleanQuery = query.toLowerCase().replace(/[\s-]/g, '');
     let searchResults = [];
     const reqSnapshot = await db.collection('requirements').get();
     reqSnapshot.forEach(doc => {
       const data = doc.data();
-      const rawReqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
-      if (rawReqId.toLowerCase().replace(/[\s-]/g, '').includes(cleanQuery) || (data.title && data.title.toLowerCase().includes(query.toLowerCase()))) {
-        searchResults.push({ id: rawReqId, title: data.title || 'Untitled', status: data.status || 'Unknown', type: "Requirement" });
+      if (!data.baId || data.baId === "" || data.baId === baId) {
+        const rawReqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
+        if (rawReqId.toLowerCase().replace(/[\s-]/g, '').includes(cleanQuery) || (data.title && data.title.toLowerCase().includes(query.toLowerCase()))) {
+          searchResults.push({ id: rawReqId, title: data.title || 'Untitled', status: data.status || 'Unknown', type: "Requirement" });
+        }
       }
     });
     return searchResults;
   }
 
-  static async getHistory() {
-    const snapshot = await db.collection('requirements').get();
+  static async getHistory(baId) {
+    const snapshot = await db.collection('requirements').where('baId', '==', baId).get();
     let history = [];
     snapshot.forEach(doc => {
       const data = doc.data();
@@ -203,8 +226,11 @@ class BATaskModel {
     return 500;
   }
 
-  static async getReadyRequirements() {
-    const reqSnapshot = await db.collection('requirements').where('status', 'in', ['In Analysis', 'Clarification Needed', 'Approved', 'Tasks Assigned']).get();
+  static async getReadyRequirements(baId) {
+    const reqSnapshot = await db.collection('requirements')
+      .where('baId', '==', baId)
+      .where('status', 'in', ['In Analysis', 'Clarification Needed', 'Approved', 'Tasks Assigned']).get();
+      
     const tasksSnap = await db.collection('tasks').where('status', '==', 'Unassigned').get().catch(() => ({ empty: true, forEach: () => {} }));
     
     let unassignedMap = {};
@@ -348,14 +374,16 @@ class BATaskModel {
 }
 
 class BACommunicationModel {
-  static async sendClarificationQuestions(reqId, questions) {
+  static async sendClarificationQuestions(reqId, questions, baId, baName) {
     const batch = db.batch();
     questions.forEach(q => {
       batch.set(db.collection('clarifications').doc(), { 
         reqId: reqId, 
         question: q, 
         status: "Pending Client", 
-        source: "BA", 
+        source: "BA",
+        baId: baId,      
+        baName: baName,  
         createdAt: admin.firestore.FieldValue.serverTimestamp() 
       });
     });

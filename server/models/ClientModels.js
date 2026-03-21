@@ -43,6 +43,8 @@ class RequirementModel {
     const newRequirement = {
       ...projectData,                     
       reqId: customReqId,
+      clientId: uid, // STRICT ISOLATION: Locks this requirement to this client
+      baId: "",      // Empty so BAs can claim it
       clientName: clientName,             
       submittedBy: clientName,            
       company: companyName,               
@@ -57,6 +59,7 @@ class RequirementModel {
     await db.collection('requirements').add(newRequirement);
 
     await db.collection('activity_logs').add({
+      clientId: uid, // ISOLATION
       user: clientName, 
       action: `Launched new request: ${projectData.title}`,
       time: admin.firestore.FieldValue.serverTimestamp(),
@@ -67,22 +70,22 @@ class RequirementModel {
     return customReqId;
   }
 
-  static async getOverviewStats() {
-    const snapshot = await db.collection('requirements').get();
+  static async getOverviewStats(uid) {
+    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
     let stats = { totalActive: 0, pendingApprovals: 0, inAnalysis: 0, clarificationsNeeded: 0 };
 
     snapshot.forEach(doc => {
       const data = doc.data();
       stats.totalActive++; 
       if (data.status === "Pending Approval") stats.pendingApprovals++;
-      if (data.status === "In Analysis") stats.inAnalysis++;
+      if (data.status === "In Analysis" || data.status === "Tasks Assigned") stats.inAnalysis++;
       if (data.status === "Clarification Needed") stats.clarificationsNeeded++;
     });
     return stats;
   }
 
-  static async getProjectProgress() {
-    const snapshot = await db.collection('requirements').orderBy('submittedAt', 'desc').limit(5).get();
+  static async getProjectProgress(uid) {
+    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
     let requirementsList = [];
     snapshot.forEach(doc => {
       const data = doc.data();
@@ -90,14 +93,20 @@ class RequirementModel {
         id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, 
         title: data.title,
         stage: data.status,
-        progress: data.progress || 0
+        progress: data.progress || 0,
+        rawDate: data.submittedAt || 0
       });
     });
-    return requirementsList;
+    
+    // Sort in memory to avoid Firebase missing index errors
+    requirementsList.sort((a, b) => (b.rawDate?.toMillis ? b.rawDate.toMillis() : 0) - (a.rawDate?.toMillis ? a.rawDate.toMillis() : 0));
+    return requirementsList.slice(0, 5);
   }
 
-  static async getChangeRequests() {
-    const snapshot = await db.collection('change_requests').where('status', '!=', 'Resolved').get();
+  static async getChangeRequests(uid) {
+    const snapshot = await db.collection('change_requests')
+      .where('clientId', '==', uid)
+      .where('status', '!=', 'Resolved').get();
     let requests = [];
     snapshot.forEach(doc => {
       const data = doc.data();
@@ -113,8 +122,11 @@ class RequirementModel {
     return requests;
   }
 
-  static async getActionItems() {
-    const snapshot = await db.collection('requirements').where('status', 'in', ['Pending Approval', 'Clarification Needed']).get();
+  static async getActionItems(uid) {
+    const snapshot = await db.collection('requirements')
+      .where('clientId', '==', uid)
+      .where('status', 'in', ['Pending Approval', 'Clarification Needed']).get();
+      
     let pendingApprovals = [], clarificationsNeeded = [];
 
     snapshot.forEach(doc => {
@@ -129,8 +141,8 @@ class RequirementModel {
     return { pendingApprovals, clarificationsNeeded };
   }
 
-  static async getRecentActivity() {
-    const snapshot = await db.collection('activity_logs').orderBy('time', 'desc').limit(5).get();
+  static async getRecentActivity(uid) {
+    const snapshot = await db.collection('activity_logs').where('clientId', '==', uid).get();
     let activities = [];
     snapshot.forEach(doc => {
       const data = doc.data();
@@ -138,14 +150,17 @@ class RequirementModel {
         id: data.reqId || doc.id.substring(0, 6),
         action: data.action,
         time: "Recently",
-        dotColor: data.dotColor || "bg-gray-400"
+        dotColor: data.dotColor || "bg-gray-400",
+        rawDate: data.time || 0
       });
     });
-    return activities;
+
+    activities.sort((a, b) => (b.rawDate?.toMillis ? b.rawDate.toMillis() : 0) - (a.rawDate?.toMillis ? a.rawDate.toMillis() : 0));
+    return activities.slice(0, 5);
   }
 
-  static async searchRequirements(searchQuery) {
-    const snapshot = await db.collection('requirements').get();
+  static async searchRequirements(searchQuery, uid) {
+    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
     let searchResults = [];
 
     snapshot.forEach(doc => {
@@ -164,16 +179,18 @@ class RequirementModel {
     return searchResults;
   }
 
-  static async getAllRequests() {
-    const snapshot = await db.collection('requirements').orderBy('submittedAt', 'desc').get();
+  static async getAllRequests(uid) {
+    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
     let requests = [];
     
     snapshot.forEach(doc => {
       const data = doc.data();
       let formattedDate = "Pending";
+      let rawDate = 0;
       if (data.submittedAt) {
         const dateObj = data.submittedAt.toDate();
         formattedDate = dateObj.toISOString().split('T')[0]; 
+        rawDate = dateObj.getTime();
       }
 
       requests.push({
@@ -186,14 +203,19 @@ class RequirementModel {
         rawDbId: doc.id,
         description: data.description || "No description provided.",
         fileName: data.fileName || "No file attached",
-        baName: data.baName || "Bhashi Fernando"
+        baName: data.baName || "Awaiting Assignment",
+        rawDate: rawDate
       });
     });
+
+    requests.sort((a, b) => b.rawDate - a.rawDate);
     return requests;
   }
 
-  static async getApprovals() {
-    const snapshot = await db.collection('requirements').where('status', '==', 'Awaiting Review').get();
+  static async getApprovals(uid) {
+    const snapshot = await db.collection('requirements')
+      .where('clientId', '==', uid)
+      .where('status', '==', 'Awaiting Review').get();
     let approvals = [];
     
     snapshot.forEach(doc => {
@@ -244,8 +266,9 @@ class RequirementModel {
     });
   }
 
-  static async getArchivedRequirements() {
+  static async getArchivedRequirements(uid) {
     const snapshot = await db.collection('requirements')
+      .where('clientId', '==', uid)
       .where('status', 'in', ['Approved & Live', 'Closed — Superseded', 'Approved', 'Completed']).get();
     
     let archives = [];
@@ -291,8 +314,9 @@ class RequirementModel {
 }
 
 class CommunicationModel {
-  static async getClarifications() {
-    const reqsSnapshot = await db.collection('requirements').get();
+  static async getClarifications(uid) {
+    // SECURITY: First, get all requirements that belong to THIS specific client
+    const reqsSnapshot = await db.collection('requirements').where('clientId', '==', uid).get();
     const requirementsMap = {};
     reqsSnapshot.forEach(doc => {
       const data = doc.data();
@@ -305,27 +329,29 @@ class CommunicationModel {
     snapshot.forEach(doc => {
       const data = doc.data();
       const reqId = data.reqId || "Unknown";
-      const parentReq = requirementsMap[reqId] || {};
+      
+      // ONLY push the clarification if the client actually owns the parent requirement!
+      if (requirementsMap[reqId]) {
+        const parentReq = requirementsMap[reqId];
+        let priority = parentReq.priority || parentReq.riskLevel || "Medium";
 
-      let priority = parentReq.priority || parentReq.riskLevel || "Medium";
-      if (priority.toLowerCase().includes("high")) priority = "Urgent"; 
-
-      clarifications.push({
-        id: doc.id,
-        reqId: reqId,
-        title: parentReq.title || "Untitled Feature",
-        baName: data.baName || "Bhashi Fernando",
-        timeAgo: getTimeAgo(data.createdAt),
-        rawDate: data.createdAt || 0,
-        priority: priority,
-        isAI: data.source === "BA", 
-        status: data.status || "Pending Client",
-        regarding: parentReq.description || "No specific context provided in the original requirement.",
-        question: data.question || "Please provide more details.",
-        answer: data.answer || "",
-        fileName: data.fileName || null, 
-        fileData: data.fileData || null  
-      });
+        clarifications.push({
+          id: doc.id,
+          reqId: reqId,
+          title: parentReq.title || "Untitled Feature",
+          baName: data.baName || "Your BA",
+          timeAgo: getTimeAgo(data.createdAt),
+          rawDate: data.createdAt || 0,
+          priority: priority,
+          isAI: data.source === "BA", 
+          status: data.status || "Pending Client",
+          regarding: parentReq.description || "No specific context provided in the original requirement.",
+          question: data.question || "Please provide more details.",
+          answer: data.answer || "",
+          fileName: data.fileName || null, 
+          fileData: data.fileData || null  
+        });
+      }
     });
 
     clarifications.sort((a, b) => {
@@ -358,15 +384,22 @@ class CommunicationModel {
     await clarificationRef.update(updatePayload);
   }
 
-  static async getMessages() {
-    const snapshot = await db.collection('messages').orderBy('timestamp', 'asc').get();
+  static async getMessages(uid) {
+    // Isolate messages to only those belonging to this client's UID
+    const snapshot = await db.collection('messages')
+      .where('clientId', '==', uid)
+      .get();
+      
     let messages = [];
     
     snapshot.forEach(doc => {
       const data = doc.data();
       let formattedTime = "Just now";
+      let rawDate = 0;
+      
       if (data.timestamp) {
         const dateObj = data.timestamp.toDate();
+        rawDate = dateObj.getTime();
         formattedTime = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       }
 
@@ -376,20 +409,25 @@ class CommunicationModel {
         text: data.text || "",
         fileName: data.fileName || null,
         sender: data.sender || "BA",
-        senderName: data.senderName || (data.sender === 'Client' ? "Dilmik Rasanjana" : "Bhashi Fernando"),
-        timestamp: formattedTime
+        senderName: data.senderName || "Your Team",
+        timestamp: formattedTime,
+        rawDate: rawDate
       });
     });
+    
+    // Sort in memory by time
+    messages.sort((a, b) => a.rawDate - b.rawDate);
     return messages;
   }
 
-  static async sendMessage(data) {
+  static async sendMessage(data, uid) {
     const newMessage = {
       text: data.text || "",
       reqId: data.reqId || "GLOBAL",
+      clientId: uid, // ISOLATION
       fileName: data.fileName || null,
       sender: data.sender || "Client",
-      senderName: data.senderName || "Dilmik Rasanjana",
+      senderName: data.senderName || "Unknown Client",
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     };
 

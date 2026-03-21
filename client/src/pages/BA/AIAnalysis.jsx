@@ -72,7 +72,6 @@ export default function AIAnalysis() {
   const [isEditingAI, setIsEditingAI] = useState(false);
   const [editedAIData, setEditedAIData] = useState(null);
 
-  // NEW: Separated AI Suggestions and Final Drafted Questions
   const [aiSuggestedQuestions, setAiSuggestedQuestions] = useState([]);
   const [draftedQuestions, setDraftedQuestions] = useState([]);
   const [newQuestion, setNewQuestion] = useState("");
@@ -91,8 +90,6 @@ export default function AIAnalysis() {
       const json = await res.json();
       if (json.success) {
         setExistingClarifications(json.data);
-        
-        // Remove AI suggestions that match newly fetched answers
         setAiSuggestedQuestions(prev => 
           prev.filter(q => !json.data.some(sent => sent.question === q))
         );
@@ -131,13 +128,12 @@ export default function AIAnalysis() {
             sentQuestions = clarifJson.data;
           }
 
-          // Setup AI Suggestions (Exclude ones already sent or drafted)
           const filteredAIQuestions = json.data.suggestedQuestions.filter(aiQ => 
             !sentQuestions.some(sq => sq.question === aiQ)
           );
             
           setAiSuggestedQuestions(filteredAIQuestions);
-          setDraftedQuestions([]); // Start with empty draft list
+          setDraftedQuestions([]); 
         }
       } catch (error) {
         console.error("AI Error:", error);
@@ -210,10 +206,7 @@ export default function AIAnalysis() {
     setEditedAIData({ ...editedAIData, [field]: value.split('\n').filter(line => line.trim() !== '') });
   };
 
-  // --- HITL QUESTION LOGIC ---
-
   const addAISuggestionToDraft = (questionText) => {
-    // Move from AI list to Draft list
     setAiSuggestedQuestions(aiSuggestedQuestions.filter(q => q !== questionText));
     setDraftedQuestions([...draftedQuestions, questionText]);
   };
@@ -222,7 +215,6 @@ export default function AIAnalysis() {
     const questionToRemove = draftedQuestions[indexToRemove];
     setDraftedQuestions(draftedQuestions.filter((_, index) => index !== indexToRemove));
     
-    // Put it back in AI suggestions if it originally came from there
     if (aiData?.suggestedQuestions?.includes(questionToRemove)) {
       setAiSuggestedQuestions([...aiSuggestedQuestions, questionToRemove]);
     }
@@ -242,7 +234,6 @@ export default function AIAnalysis() {
     if (draftedQuestions.length === 0) return;
     setIsSending(true);
     try {
-      // Backend automatically sets source: "BA", so client thinks it's purely human
       const payload = { reqId: reqId, questions: draftedQuestions };
       const response = await fetch("http://localhost:5000/api/ba/clarifications/send", {
         method: "POST",
@@ -267,10 +258,10 @@ export default function AIAnalysis() {
         <BATopBar />
         <div className="flex max-w-[1600px] mx-auto pt-6 px-6 gap-8">
           <BASidebar />
-          <div className="flex-1 flex flex-col items-center justify-center h-[calc(100vh-100px)] bg-white rounded-[24px] border border-gray-100 shadow-sm">
-            <Sparkles className="w-16 h-16 text-primary animate-pulse mb-6" />
-            <h2 className="text-xl font-bold text-navy">NexBA AI is analyzing the requirement...</h2>
-            <p className="text-gray-500 mt-2 text-sm">Extracting constraints, detecting ambiguities, and generating user stories.</p>
+          <div className="flex-1 flex flex-col items-center justify-center h-[calc(100vh-100px)]">
+            <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+            <p className="text-gray-500 font-medium">NexBA AI is analyzing the requirement...</p>
+            <p className="text-gray-400 mt-2 text-sm">Extracting constraints and detecting ambiguities</p>
           </div>
         </div>
       </div>
@@ -294,20 +285,22 @@ export default function AIAnalysis() {
           <div className="flex justify-between items-center mb-6 flex-shrink-0">
             <div>
               <h1 className="text-[22px] font-bold text-navy">AI Analysis Workspace</h1>
-              <p className="text-[13px] text-gray-500 mt-1">Extract constraints, detect ambiguities, and generate user stories using NexBA AI.</p>
+              <p className="text-sm text-gray-500 mt-1">Extract constraints, detect ambiguities, and generate user stories using NexBA AI.</p>
             </div>
             
             <div className="relative">
               <div 
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="bg-white px-5 py-2.5 rounded-full border border-gray-200 shadow-sm flex items-center font-semibold text-navy text-sm cursor-pointer hover:bg-gray-50 transition-all select-none"
+                className="bg-white px-5 py-2.5 rounded-full border border-gray-200 shadow-sm flex items-center justify-between font-semibold text-navy text-sm cursor-pointer hover:bg-gray-50 transition-all select-none w-[350px]"
               >
-                {reqId ? `${reqId}: ${reqDetails?.title}` : "Select a Requirement"}
-                <ChevronDown className={`w-4 h-4 ml-3 text-gray-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                <span className="truncate pr-4">
+                  {reqId ? `${reqId}: ${reqDetails?.title}` : "Select a Requirement"}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 flex-shrink-0 ${isDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
 
               {isDropdownOpen && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-200">
                   <div className="px-4 py-3 flex items-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-50 mb-2">
                     <History className="w-3.5 h-3.5 mr-2" /> Previously Analyzed
                   </div>
@@ -337,20 +330,22 @@ export default function AIAnalysis() {
 
           {/* EMPTY STATE */}
           {!reqId ? (
-            <div className="flex-1 bg-white rounded-[24px] shadow-sm border border-gray-100 flex flex-col items-center justify-center py-20 text-center px-4 mt-6">
-              <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center text-primary mb-6 shadow-sm">
-                <Sparkles className="w-12 h-12" />
+            <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-0">
+              <div className="flex-1 flex flex-col items-center justify-center p-8">
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-primary mb-6 shadow-sm">
+                  <Sparkles className="w-10 h-10" />
+                </div>
+                <h3 className="text-lg font-bold text-navy mb-2">AI Intelligence Hub</h3>
+                <p className="text-sm text-gray-500 mb-8 max-w-md text-center">
+                  Select a requirement from the dropdown menu above, or choose one from your Inbox to extract constraints, detect ambiguities, and generate user stories using NexBA AI.
+                </p>
+                <button 
+                  onClick={() => navigate('/ba/inbox')} 
+                  className="bg-primary hover:bg-blue-600 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-sm flex items-center"
+                >
+                  <Inbox className="w-4 h-4 mr-2" /> Go to Requirement Inbox
+                </button>
               </div>
-              <h2 className="text-2xl font-black text-navy mb-3">AI Intelligence Hub</h2>
-              <p className="text-gray-500 max-w-md leading-relaxed text-sm">
-                Select a requirement from the dropdown menu above, or choose one from your Inbox to extract constraints, detect ambiguities, and generate user stories using NexBA AI.
-              </p>
-              <button 
-                onClick={() => navigate('/ba/inbox')} 
-                className="mt-8 bg-white border border-gray-200 text-navy font-bold py-3.5 px-8 rounded-full hover:bg-gray-50 transition-all shadow-sm flex items-center text-sm hover:shadow-md"
-              >
-                <Inbox className="w-4 h-4 mr-2 text-gray-400" /> Go to Requirement Inbox
-              </button>
             </div>
           ) : (
             <>

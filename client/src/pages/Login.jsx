@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { auth } from "../firebase"; // <--- FIXED PATH!
+import { auth } from "../firebase"; 
 import { signOut } from "firebase/auth";
+import { ArrowLeft, Loader2 } from "lucide-react"; // <-- Added Icons
 import logoDark from '../assets/logo-dark.png';
 
 export default function Login() {
@@ -60,42 +61,54 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#EBF3FA] to-[#F5F7FA] flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#EBF3FA] to-[#F5F7FA] flex flex-col items-center justify-center p-4 py-10 md:py-12 relative overflow-x-hidden">
       
-      <Link to="/" className="mb-8 hover:scale-105 transition-transform duration-300">
-        <img src={logoDark} alt="NexBA Logo" className="h-10 w-auto" />
+      {/* 1. BACK TO HOME BUTTON (Matches Register Page) */}
+      <Link 
+        to="/" 
+        className="absolute top-6 left-4 md:top-8 md:left-8 flex items-center space-x-2 text-gray-500 hover:text-primary transition-colors font-medium text-xs md:text-sm group"
+      >
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+        <span className="hidden sm:inline">Back to Home</span>
+        <span className="sm:hidden">Back</span>
       </Link>
 
-      <div className="bg-white w-full max-w-md rounded-[2rem] p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-        <h2 className="text-2xl font-bold text-navy mb-8">Welcome back</h2>
+      {/* 2. LOGO */}
+      <Link to="/" className="mt-8 md:mt-0 mb-6 md:mb-8 hover:scale-105 transition-transform duration-300">
+        <img src={logoDark} alt="NexBA Logo" className="h-8 md:h-10 w-auto" />
+      </Link>
 
-        {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-sm">{error}</div>}
+      {/* 3. LOGIN CARD (Adjusted padding and border radius for mobile) */}
+      <div className="bg-white w-full max-w-md rounded-3xl md:rounded-[2rem] p-6 sm:p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+        <h2 className="text-xl md:text-2xl font-bold text-navy mb-6 md:mb-8 text-center sm:text-left">Welcome back</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
+        {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-sm text-center sm:text-left">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-5 md:space-y-6">
+          <div className="space-y-1.5 md:space-y-2">
             <label className="text-xs font-semibold text-gray-500 ml-1">Email Address</label>
             <input
               type="email"
               required
               value={email}
               placeholder="you@company.com"
-              className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 px-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:bg-white focus:border-blue-100"
+              className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 px-4 py-3 md:py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:bg-white focus:border-blue-100 text-sm md:text-base"
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5 md:space-y-2">
             <label className="text-xs font-semibold text-gray-500 ml-1">Password</label>
             <input
               type="password"
               required
               placeholder="••••••••"
-              className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 px-4 py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:bg-white focus:border-blue-100"
+              className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 px-4 py-3 md:py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:bg-white focus:border-blue-100 text-sm md:text-base"
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-1 md:pt-2">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input 
                 type="checkbox" 
@@ -103,24 +116,25 @@ export default function Login() {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" 
               />
-              <span className="text-sm text-gray-600">Remember me</span>
+              <span className="text-xs md:text-sm text-gray-600">Remember me</span>
             </label>
-            <Link to="/forgot-password" className="text-sm font-medium text-primary hover:underline">
+            <Link to="/forgot-password" className="text-xs md:text-sm font-medium text-primary hover:underline">
               Forgot Password?
             </Link>
           </div>
 
-          <button disabled={loading} type="submit" className="w-full bg-primary hover:bg-blue-600 text-white font-semibold py-3.5 rounded-full transition-all shadow-md hover:shadow-lg mt-4 active:scale-95">
+          <button disabled={loading} type="submit" className="w-full bg-primary hover:bg-blue-600 text-white font-semibold py-3.5 rounded-full transition-all shadow-md hover:shadow-lg mt-4 active:scale-95 flex items-center justify-center text-sm md:text-base">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-8">
+        <p className="text-center text-xs sm:text-sm text-gray-500 mt-6 md:mt-8">
           Don't have an account? <Link to="/register" className="text-primary font-semibold hover:underline">Register here</Link>
         </p>
       </div>
 
-      <p className="text-xs text-gray-400 mt-12">© 2026 NexBA Inc. • Privacy & Terms</p>
+      <p className="text-[10px] sm:text-xs text-gray-400 mt-8 md:mt-12 text-center">© 2026 NexBA Inc. • Privacy & Terms</p>
     </div>
   );
 }

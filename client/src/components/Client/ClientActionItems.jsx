@@ -21,76 +21,84 @@ export default function ClientActionItems() {
   }, []);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mt-6 md:mt-8">
       
       {/* LEFT COLUMN: Pending Approvals */}
-      <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 overflow-hidden flex flex-col">
+      <div className="bg-white rounded-3xl md:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 overflow-hidden flex flex-col">
         
         {/* Header */}
-        <div className="px-8 py-6 border-b border-gray-50 flex items-center justify-between bg-white">
-          <div className="flex items-center space-x-3">
-            <CheckCircle2 className="w-6 h-6 text-green-500" />
-            <h2 className="text-lg font-bold text-navy">Pending Approvals</h2>
-            <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">
+        <div className="px-5 py-4 md:px-8 md:py-6 border-b border-gray-50 flex items-center justify-between bg-white">
+          <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
+            <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6 text-green-500 flex-shrink-0" />
+            <h2 className="text-base md:text-lg font-bold text-navy truncate">Pending Approvals</h2>
+            <span className="bg-green-100 text-green-700 text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-2.5 md:py-1 rounded-full flex-shrink-0">
               {data.pendingApprovals.length}
             </span>
           </div>
           {/* PROPER NAVIGATION: View All Link */}
-          <Link to="/dashboard/approvals" className="text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors">
-            View All <ArrowRight className="w-4 h-4 ml-1" />
+          <Link to="/dashboard/approvals" className="text-xs md:text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors whitespace-nowrap pl-2">
+            View All <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1" />
           </Link>
         </div>
 
         {/* List Items */}
-        <div className="flex-1 p-4 overflow-y-auto">
-          {data.pendingApprovals.map((item, index) => (
-            <div key={index} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-colors mb-2 border border-transparent hover:border-gray-100">
-              <div className="pr-4">
-                <p className="text-sm font-bold text-navy">{item.title}</p>
-                <p className="text-xs text-gray-500 mt-1">{item.id} · {item.meta}</p>
+        <div className="flex-1 p-3 md:p-4 overflow-y-auto max-h-[400px] lg:max-h-none">
+          {data.pendingApprovals.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 text-sm">No approvals pending.</div>
+          ) : (
+            data.pendingApprovals.map((item, index) => (
+              <div key={index} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-colors mb-2 border border-transparent hover:border-gray-100">
+                <div className="min-w-0 pr-3 md:pr-4">
+                  <p className="text-[13px] md:text-sm font-bold text-navy truncate">{item.title}</p>
+                  <p className="text-[11px] md:text-xs text-gray-500 mt-1 truncate">{item.id} · {item.meta}</p>
+                </div>
+                {/* PROPER NAVIGATION: Review Button */}
+                <Link to={`/dashboard/approvals`} className="flex-shrink-0 text-[11px] md:text-sm font-bold text-primary border border-primary px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl hover:bg-blue-50 transition-colors">
+                  Review
+                </Link>
               </div>
-              {/* PROPER NAVIGATION: Review Button */}
-              <Link to={`/dashboard/approvals`} className="flex-shrink-0 text-sm font-bold text-primary border border-primary px-4 py-2 rounded-xl hover:bg-blue-50 transition-colors">
-                Review
-              </Link>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
       {/* RIGHT COLUMN: Clarifications Needed */}
-      <div className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 overflow-hidden flex flex-col">
+      <div className="bg-white rounded-3xl md:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 overflow-hidden flex flex-col">
         
         {/* Header */}
-        <div className="px-8 py-6 border-b border-gray-50 flex items-center justify-between bg-white">
-          <div className="flex items-center space-x-3">
-            <MessageSquare className="w-6 h-6 text-red-500" />
-            <h2 className="text-lg font-bold text-navy">Clarifications Needed</h2>
-            <span className="bg-red-100 text-red-600 text-xs font-bold px-2.5 py-1 rounded-full">
+        <div className="px-5 py-4 md:px-8 md:py-6 border-b border-gray-50 flex items-center justify-between bg-white">
+          <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
+            <MessageSquare className="w-5 h-5 md:w-6 md:h-6 text-red-500 flex-shrink-0" />
+            <h2 className="text-base md:text-lg font-bold text-navy truncate">Clarifications Needed</h2>
+            <span className="bg-red-100 text-red-600 text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-2.5 md:py-1 rounded-full flex-shrink-0">
               {data.clarificationsNeeded.length}
             </span>
           </div>
           {/* PROPER NAVIGATION: View All Link */}
-          <Link to="/dashboard/clarifications" className="text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors">
-            View All <ArrowRight className="w-4 h-4 ml-1" />
+          <Link to="/dashboard/clarifications" className="text-xs md:text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors whitespace-nowrap pl-2">
+            View All <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1" />
           </Link>
         </div>
 
         {/* List Items */}
-        <div className="flex-1 p-4 overflow-y-auto">
-          {data.clarificationsNeeded.map((item, index) => (
-            <div key={index} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-colors mb-2 border border-transparent hover:border-gray-100">
-              <div className="pr-4">
-                <p className="text-sm font-bold text-navy">{item.title}</p>
-                <p className="text-xs text-gray-500 mt-1">{item.id} · {item.meta}</p>
-                <p className="text-xs text-gray-600 italic mt-2 border-l-2 border-red-200 pl-2">{item.quote}</p>
+        <div className="flex-1 p-3 md:p-4 overflow-y-auto max-h-[400px] lg:max-h-none">
+          {data.clarificationsNeeded.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 text-sm">No clarifications needed right now.</div>
+          ) : (
+            data.clarificationsNeeded.map((item, index) => (
+              <div key={index} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-colors mb-2 border border-transparent hover:border-gray-100">
+                <div className="min-w-0 pr-3 md:pr-4">
+                  <p className="text-[13px] md:text-sm font-bold text-navy truncate">{item.title}</p>
+                  <p className="text-[11px] md:text-xs text-gray-500 mt-1 truncate">{item.id} · {item.meta}</p>
+                  <p className="text-[11px] md:text-xs text-gray-600 italic mt-2 border-l-2 border-red-200 pl-2 line-clamp-2 md:line-clamp-none">{item.quote}</p>
+                </div>
+                {/* PROPER NAVIGATION: Respond Button */}
+                <Link to={`/dashboard/clarifications`} className="flex-shrink-0 text-[11px] md:text-sm font-bold text-red-500 border border-red-500 px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl hover:bg-red-50 transition-colors">
+                  Respond
+                </Link>
               </div>
-              {/* PROPER NAVIGATION: Respond Button */}
-              <Link to={`/dashboard/clarifications`} className="flex-shrink-0 text-sm font-bold text-red-500 border border-red-500 px-4 py-2 rounded-xl hover:bg-red-50 transition-colors">
-                Respond
-              </Link>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

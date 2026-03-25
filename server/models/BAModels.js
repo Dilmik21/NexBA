@@ -60,8 +60,8 @@ class BARequirementModel {
     if (!tasksSnapshot.empty) {
       tasksSnapshot.forEach(doc => {
         const task = doc.data();
-        if (['To Do', 'In Progress', 'In Review'].includes(task.status) && task.assigneeName && devLoadMap[task.assigneeName]) {
-          devLoadMap[task.assigneeName].count++;
+        if (['To Do', 'In Progress', 'In Review', 'Pending Team Assignment'].includes(task.status) && task.teamLeaderName && devLoadMap[task.teamLeaderName]) {
+          devLoadMap[task.teamLeaderName].count++;
         }
         if (task.reqId) {
           if (!reqTaskStatusMap[task.reqId]) reqTaskStatusMap[task.reqId] = [];
@@ -70,21 +70,24 @@ class BARequirementModel {
       });
     }
 
-    const inProgressStatuses = ["In Analysis", "Clarification Needed", "Tasks Assigned", "In Progress", "Awaiting Verification", "Pending Verification", "Modification Requested"];
+    const inProgressStatuses = ["In Analysis", "Clarification Needed", "Sent to Engineering", "In Progress", "Awaiting Verification", "Pending Verification", "Modification Requested"];
+    const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
 
     reqSnapshot.forEach(doc => {
       const data = doc.data();
       const rawReqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
       const clientName = getClientName(data);
       
-      // STRICT CHECK: Ensure legacy missing fields don't cause ghosting
       const dbBaId = data.baId || ""; 
       const isUnassigned = dbBaId === "";
-      const isMine = baId && dbBaId === baId; // MUST exactly match the logged-in BA
+      const isMine = baId && dbBaId === baId; 
+      const isFinished = finishedStatuses.includes(data.status);
 
-      if (data.status === "Pending BA Review" && isUnassigned) {
+      if (isUnassigned) {
         pendingReviews++; 
         rawInbox.push({ id: rawReqId, title: data.title || "Untitled Request", client: clientName, rawDate: data.submittedAt || 0, time: getTimeAgo(data.submittedAt), isNew: true });
+      } else if (isMine && !isFinished) {
+        rawInbox.push({ id: rawReqId, title: data.title || "Untitled Request", client: clientName, rawDate: data.submittedAt || 0, time: getTimeAgo(data.submittedAt), isNew: false });
       }
 
       if (isMine) {
@@ -111,14 +114,14 @@ class BARequirementModel {
     });
 
     let developerLoad = Object.values(devLoadMap);
-    if (developerLoad.length === 0) developerLoad = [{ name: "Naveen Dilhan", count: 7 }, { name: "Dewni Witharana", count: 5 }, { name: "Sheran Ashintha", count: 4 }];
+    if (developerLoad.length === 0) developerLoad = [{ name: "Naveen Dilhan", count: 12 }, { name: "Dewni Witharana", count: 8 }, { name: "Sheran Ashintha", count: 4 }];
     developerLoad.sort((a, b) => b.count - a.count);
-    const maxCount = Math.max(...developerLoad.map(d => d.count), 8);
+    const maxCount = Math.max(...developerLoad.map(d => d.count), 40);
     developerLoad = developerLoad.map(dev => {
       let color = "bg-[#10B981]", textColor = "text-white";
-      if (dev.count >= 7) { color = "bg-gray-100"; textColor = "text-gray-400"; } 
-      else if (dev.count >= 5) { color = "bg-yellow-500"; } 
-      else if (dev.count >= 4) { color = "bg-[#0A66C2]"; }
+      if (dev.count >= 35) { color = "bg-gray-100"; textColor = "text-gray-400"; } 
+      else if (dev.count >= 25) { color = "bg-yellow-500"; } 
+      else if (dev.count >= 15) { color = "bg-[#0A66C2]"; }
       return { name: dev.name, count: dev.count, color: color, textColor: textColor, widthPercent: Math.max((dev.count / maxCount) * 100, 5) };
     });
 
@@ -138,19 +141,39 @@ class BARequirementModel {
     return { stats: { pendingReviews, verificationQueue: verificationQueueCount, criticalRisks, activeRequirements: activeReqs }, inbox: rawInbox.slice(0, 3), changeRequests: rawChangeRequests.slice(0, 3), developerLoad: developerLoad, verificationQueue: rawVerificationQueue.slice(0, 4), developerUpdates: rawDeveloperUpdates.slice(0, 3) };
   }
 
-  static async getInbox() {
+  static async getInbox(baId) {
     const reqSnapshot = await db.collection('requirements').get();
     let inbox = [];
+    
+    const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
+
     reqSnapshot.forEach(doc => {
       const data = doc.data();
       const isUnassigned = !data.baId || data.baId === "";
+      const isMine = baId && data.baId === baId;
+      const isFinished = finishedStatuses.includes(data.status);
       
-      if (isUnassigned) {
+      if (isUnassigned || (isMine && !isFinished)) {
         inbox.push({
-          dbId: doc.id, id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, title: data.title || 'Untitled Requirement', description: data.description || data.text || 'No description provided.', submitter: getClientName(data), company: data.company || data.companyName || 'Cargills Corporation', priority: getPriority(data), type: (data.fileUrl || data.fileName || data.attachments || data.type === 'File') ? 'File' : 'Text', fileName: data.fileName || 'document.pdf', fileUrl: data.fileUrl || null, fullDate: formatFullDate(data.submittedAt), timeAgo: getTimeAgo(data.submittedAt), rawDate: data.submittedAt || 0, status: data.status || 'Pending BA Review', isNew: data.status === 'Pending BA Review' 
+          dbId: doc.id, 
+          id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, 
+          title: data.title || 'Untitled Requirement', 
+          description: data.description || data.text || 'No description provided.', 
+          submitter: getClientName(data), 
+          company: data.company || data.companyName || 'Cargills Corporation', 
+          priority: getPriority(data), 
+          type: (data.fileUrl || data.fileName || data.attachments || data.type === 'File') ? 'File' : 'Text', 
+          fileName: data.fileName || 'document.pdf', 
+          fileUrl: data.fileUrl || null, 
+          fullDate: formatFullDate(data.submittedAt), 
+          timeAgo: getTimeAgo(data.submittedAt), 
+          rawDate: data.submittedAt || 0, 
+          status: data.status || 'Pending BA Review', 
+          isNew: isUnassigned
         });
       }
     });
+
     inbox.sort((a, b) => {
       if (a.isNew && !b.isNew) return -1;
       if (!a.isNew && b.isNew) return 1;
@@ -210,110 +233,183 @@ class BARequirementModel {
     if (!reqDoc) throw new Error("Not found");
     const payload = { aiProcessedData: aiProcessedData };
     if (updateStatusToInAnalysis) payload.status = "In Analysis";
+    
     await reqDoc.ref.update(payload);
-    return { ...reqDoc.data(), ...payload };
+    return { ...reqDoc.data, ...payload }; 
   }
 }
 
 class BATaskModel {
-  static async getHighestTaskId() {
-    const lastTaskSnap = await db.collection('tasks').orderBy('taskId', 'desc').limit(1).get();
-    if (!lastTaskSnap.empty) {
-      const lastIdStr = lastTaskSnap.docs[0].data().taskId || 'TASK-500';
-      const lastNum = parseInt(lastIdStr.replace('TASK-', ''));
-      if (!isNaN(lastNum)) return lastNum;
+  static async getNextTaskSuffix(reqId) {
+    try {
+      const snap = await db.collection('tasks').where('reqId', '==', reqId).get();
+      let maxSuffix = 0;
+      snap.forEach(doc => {
+        const taskId = doc.data().taskId || "";
+        const parts = taskId.split('-');
+        if (parts.length >= 3) {
+          const suffix = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(suffix) && suffix > maxSuffix) {
+            maxSuffix = suffix;
+          }
+        }
+      });
+      return maxSuffix + 1;
+    } catch (error) {
+      console.error("Error fetching next task suffix:", error);
+      return 1;
     }
-    return 500;
   }
 
   static async getReadyRequirements(baId) {
     const reqSnapshot = await db.collection('requirements')
       .where('baId', '==', baId)
-      .where('status', 'in', ['In Analysis', 'Clarification Needed', 'Approved', 'Tasks Assigned']).get();
+      .get();
       
-    const tasksSnap = await db.collection('tasks').where('status', '==', 'Unassigned').get().catch(() => ({ empty: true, forEach: () => {} }));
+    const tasksSnap = await db.collection('tasks').get().catch(() => ({ empty: true, forEach: () => {} }));
     
-    let unassignedMap = {};
+    let taskMap = {};
     if (!tasksSnap.empty) {
       tasksSnap.forEach(doc => {
         const t = doc.data();
-        if (!unassignedMap[t.reqId]) unassignedMap[t.reqId] = [];
+        if (!taskMap[t.reqId]) taskMap[t.reqId] = [];
         t.displayId = t.taskId; 
-        unassignedMap[t.reqId].push(t);
+        taskMap[t.reqId].push(t);
       });
     }
 
-    const globalTaskCount = await this.getHighestTaskId();
     let reqs = [];
+    const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
+
     reqSnapshot.forEach(doc => {
       const data = doc.data();
       const rawReqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
-      if (data.aiProcessedData) {
+      
+      let mappedTasks = taskMap[rawReqId] || [];
+      mappedTasks.sort((a, b) => {
+        const numA = parseInt(a.taskId.split('-').pop(), 10) || 0;
+        const numB = parseInt(b.taskId.split('-').pop(), 10) || 0;
+        return numA - numB;
+      });
+
+      if (data.aiProcessedData && !finishedStatuses.includes(data.status)) {
         reqs.push({
           id: rawReqId,
           title: data.title || "Untitled Requirement",
           status: data.status || "In Analysis",
+          projectType: data.projectType || null, 
+          teamLeaderName: data.teamLeaderName || null,
           aiProcessedData: data.aiProcessedData,
-          unassignedTasks: unassignedMap[rawReqId] || [] 
+          tasks: mappedTasks 
         });
       }
     });
-    return { reqs, globalTaskCount };
+
+    reqs.sort((a, b) => b.id.localeCompare(a.id));
+    return { reqs }; 
   }
 
-  static async getDevelopers() {
+  static async getTeamLeaders() {
     const devsSnapshot = await db.collection('users').where('role', '==', 'Developer').get();
-    const tasksSnapshot = await db.collection('tasks').where('status', 'in', ['To Do', 'In Progress', 'In Review']).get().catch(() => ({ empty: true, forEach: () => {} }));
-
-    let loadMap = {};
-    if (!tasksSnapshot.empty) {
-      tasksSnapshot.forEach(doc => {
-        const t = doc.data();
-        if (t.assigneeId) loadMap[t.assigneeId] = (loadMap[t.assigneeId] || 0) + 1;
+    
+    // Count REQUIREMENTS assigned to each leader
+    const activeReqsSnap = await db.collection('requirements')
+      .where('status', 'in', ['Sent to Engineering', 'In Progress', 'Awaiting Verification', 'Pending Verification', 'Modification Requested'])
+      .get()
+      .catch(() => ({ empty: true, forEach: () => {} }));
+      
+    let reqLoadMap = {};
+    if (!activeReqsSnap.empty) {
+      activeReqsSnap.forEach(doc => {
+        const reqData = doc.data();
+        if (reqData.teamLeaderId) {
+          reqLoadMap[reqData.teamLeaderId] = (reqLoadMap[reqData.teamLeaderId] || 0) + 1;
+        }
       });
     }
 
-    let developers = [];
+    const specialtiesList = [
+      "Web Development", "Mobile Development", "Desktop Development", 
+      "Game Development", "Embedded Systems Development", "Cloud Development", 
+      "DevOps Development", "AI / Machine Learning Development", 
+      "Data Science Development", "Cybersecurity Development"
+    ];
+
+    let leaders = [];
+    let i = 0;
+    
     devsSnapshot.forEach(doc => {
       const data = doc.data();
-      developers.push({
+      const fullName = data.fullName || data.name || "Unknown Leader";
+      const firstName = fullName.split(" ")[0];
+      
+      leaders.push({
         id: doc.id,
-        fullName: data.fullName || data.name || "Unknown Dev",
-        skills: data.skills || "Full-stack Developer",
-        initials: (data.fullName || "D").split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase(),
-        currentLoad: loadMap[doc.id] || 0,
-        maxLoad: 10
+        fullName: fullName,
+        teamName: data.teamName || `${firstName}'s Team`,
+        specialty: data.specialty || specialtiesList[i % specialtiesList.length],
+        initials: fullName.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase(),
+        currentLoad: reqLoadMap[doc.id] || 0,
+        maxLoad: 10 
       });
+      i++;
     });
 
-    if (developers.length === 0) {
-      developers = [
-        { id: "dev1", fullName: "Sheran Ashintha", skills: "Front-end Developer", currentLoad: 2, maxLoad: 10, initials: "SA" },
-        { id: "dev2", fullName: "Shenon Lekamge", skills: "Full-stack Developer", currentLoad: 3, maxLoad: 10, initials: "SL" }
+    if (leaders.length === 0) {
+      leaders = [
+        { id: "dev1", fullName: "Naveen Dilhan", teamName: "Naveen's Team", specialty: "Web Development", currentLoad: 2, maxLoad: 10, initials: "ND" },
+        { id: "dev2", fullName: "Sheran Ashintha", teamName: "Sheran's Team", specialty: "Mobile Development", currentLoad: 5, maxLoad: 10, initials: "SA" }
       ];
     }
-    developers.sort((a, b) => a.currentLoad - b.currentLoad);
-    return developers;
+    
+    leaders.sort((a, b) => a.currentLoad - b.currentLoad);
+    return leaders;
   }
 
-  static async clearAndSaveAITasks(reqId, generatedTasks) {
-    const existingUnassigned = await db.collection('tasks').where('reqId', '==', reqId).where('status', '==', 'Unassigned').get();
-    if (!existingUnassigned.empty) {
-      const deleteBatch = db.batch();
-      existingUnassigned.forEach(doc => deleteBatch.delete(doc.ref));
+  // --- BULLETPROOF ID RECYCLING: Guaranteed to reuse 1, 2, 3 for new AI tasks ---
+  static async clearAndSaveAITasks(reqId, generatedTasks, projectType) {
+    const allTasksSnap = await db.collection('tasks').where('reqId', '==', reqId).get();
+    
+    const lockedSuffixes = new Set();
+    const deleteBatch = db.batch();
+
+    let deletedCount = 0;
+
+    allTasksSnap.forEach(doc => {
+      const t = doc.data();
+      const suffix = parseInt(t.taskId.split('-').pop(), 10);
+
+      // We ONLY delete Unassigned tasks. 
+      if (t.status === 'Unassigned') {
+        deleteBatch.delete(doc.ref);
+        deletedCount++;
+      } else {
+        // If a task is assigned/locked, its number is strictly taken
+        if (!isNaN(suffix)) lockedSuffixes.add(suffix);
+      }
+    });
+
+    if (deletedCount > 0) {
       await deleteBatch.commit();
     }
 
-    let currentMax = await this.getHighestTaskId();
     const batch = db.batch();
     const savedTasks = [];
+    const reqNum = reqId.includes('-') ? reqId.split('-')[1] : reqId;
+    
+    let currentTry = 1;
 
-    generatedTasks.forEach((task, index) => {
-      const newRef = db.collection('tasks').doc();
-      const nextNum = currentMax + index + 1;
-      const formattedNum = String(nextNum).padStart(3, '0');
-      const taskId = `TASK-${formattedNum}`;
+    generatedTasks.forEach((task) => {
+      // Loop upwards from 1 until we find an ID that is NOT in lockedSuffixes
+      // This means if 1, 2, and 3 were just deleted, they are instantly reused here!
+      while (lockedSuffixes.has(currentTry)) {
+        currentTry++;
+      }
       
+      const taskId = `TASK-${reqNum}-${currentTry}`;
+      lockedSuffixes.add(currentTry); // Mark it as taken for the next loop
+      
+      const newRef = db.collection('tasks').doc();
       const taskObj = {
         taskId: taskId,
         displayId: taskId, 
@@ -328,46 +424,129 @@ class BATaskModel {
       savedTasks.push(taskObj);
     });
 
+    const reqSnapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
+    if (!reqSnapshot.empty) {
+        batch.update(reqSnapshot.docs[0].ref, { projectType: projectType || "Web Development" });
+    }
+
     await batch.commit();
     return savedTasks;
   }
 
-  static async assignTasks(reqId, tasks) {
-    let currentMax = await this.getHighestTaskId();
-    const batch = db.batch();
+  static async saveManualTask(reqId, task) {
+    const allTasksSnap = await db.collection('tasks').where('reqId', '==', reqId).get();
+    const usedSuffixes = new Set();
+    allTasksSnap.forEach(doc => {
+      const suffix = parseInt(doc.data().taskId.split('-').pop(), 10);
+      if (!isNaN(suffix)) usedSuffixes.add(suffix);
+    });
 
-    for (const task of tasks) {
-      if (task.taskId) {
-        const taskQuery = await db.collection('tasks').where('taskId', '==', task.taskId).get();
-        if (!taskQuery.empty) {
-          batch.update(taskQuery.docs[0].ref, {
-            assigneeId: task.assigneeId,
-            assigneeName: task.assigneeName,
-            status: "To Do",
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-        }
-      } else {
-        const newRef = db.collection('tasks').doc();
-        currentMax++;
-        const formattedNum = String(currentMax).padStart(3, '0');
-        
-        batch.set(newRef, {
-          taskId: `TASK-${formattedNum}`,
-          reqId: reqId,
-          title: task.title,
-          priority: task.priority || 'Medium',
-          requiredRole: task.requiredRole || 'Full-stack Developer',
-          assigneeId: task.assigneeId,
-          assigneeName: task.assigneeName,
-          status: "To Do",
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-      }
+    let currentTry = 1;
+    while (usedSuffixes.has(currentTry)) {
+      currentTry++;
     }
 
-    const reqSnapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
-    if (!reqSnapshot.empty) batch.update(reqSnapshot.docs[0].ref, { status: "Tasks Assigned" });
+    const reqNum = reqId.includes('-') ? reqId.split('-')[1] : reqId;
+    const taskId = `TASK-${reqNum}-${currentTry}`;
+    
+    const newRef = db.collection('tasks').doc();
+    const taskObj = {
+      taskId: taskId,
+      displayId: taskId,
+      reqId: reqId,
+      title: task.title,
+      priority: task.priority || 'Medium',
+      requiredRole: task.requiredRole || 'Full-stack Developer',
+      status: "Unassigned",
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    
+    await newRef.set(taskObj);
+    return taskObj;
+  }
+
+  static async removeTask(taskId) {
+    const snapshot = await db.collection('tasks').where('taskId', '==', taskId).get();
+    if (snapshot.empty) return null;
+
+    const taskDoc = snapshot.docs[0];
+    const reqId = taskDoc.data().reqId;
+
+    await taskDoc.ref.delete();
+
+    const remainingSnap = await db.collection('tasks').where('reqId', '==', reqId).get();
+    let allRemaining = [];
+    remainingSnap.forEach(doc => allRemaining.push({ id: doc.id, ref: doc.ref, data: doc.data() }));
+
+    const lockedTasks = allRemaining.filter(t => t.data.status !== 'Unassigned');
+    let unassignedTasks = allRemaining.filter(t => t.data.status === 'Unassigned');
+
+    const lockedSuffixes = new Set();
+    lockedTasks.forEach(t => {
+      const suffix = parseInt(t.data.taskId.split('-').pop(), 10);
+      if (!isNaN(suffix)) lockedSuffixes.add(suffix);
+    });
+
+    unassignedTasks.sort((a, b) => {
+       const numA = parseInt(a.data.taskId.split('-').pop(), 10) || 0;
+       const numB = parseInt(b.data.taskId.split('-').pop(), 10) || 0;
+       return numA - numB;
+    });
+
+    const batch = db.batch();
+    const reqNum = reqId.includes('-') ? reqId.split('-')[1] : reqId;
+
+    let currentTry = 1;
+    unassignedTasks.forEach((t) => {
+       while (lockedSuffixes.has(currentTry)) {
+         currentTry++;
+       }
+       const newTaskId = `TASK-${reqNum}-${currentTry}`;
+       lockedSuffixes.add(currentTry);
+
+       if (t.data.taskId !== newTaskId) {
+         batch.update(t.ref, { taskId: newTaskId, displayId: newTaskId });
+         t.data.taskId = newTaskId;
+         t.data.displayId = newTaskId;
+       }
+    });
+
+    await batch.commit();
+
+    const finalArray = allRemaining.map(t => t.data).sort((a, b) => {
+       const numA = parseInt(a.taskId.split('-').pop(), 10) || 0;
+       const numB = parseInt(b.taskId.split('-').pop(), 10) || 0;
+       return numA - numB;
+    });
+
+    return finalArray;
+  }
+
+  static async sendToEngineeringTeam(reqId, leaderId, leaderName) {
+    const batch = db.batch();
+    
+    const tasksQuery = await db.collection('tasks')
+      .where('reqId', '==', reqId)
+      .where('status', '==', 'Unassigned')
+      .get();
+
+    tasksQuery.forEach(doc => {
+      batch.update(doc.ref, {
+        status: "Pending Team Assignment", 
+        teamLeaderId: leaderId,
+        teamLeaderName: leaderName,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    });
+
+    const reqQuery = await db.collection('requirements').where('reqId', '==', reqId).get();
+    if (!reqQuery.empty) {
+      batch.update(reqQuery.docs[0].ref, {
+        status: "Sent to Engineering",
+        teamLeaderId: leaderId,
+        teamLeaderName: leaderName
+      });
+    }
 
     await batch.commit();
   }
@@ -395,9 +574,41 @@ class BACommunicationModel {
   static async getClarifications(reqId) {
     const snapshot = await db.collection('clarifications').where('reqId', '==', reqId).get();
     let clarifications = [];
+    
     snapshot.forEach(doc => clarifications.push({ id: doc.id, ...doc.data() }));
     clarifications.sort((a, b) => (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0) - (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0));
-    return clarifications;
+    
+    return clarifications.map(c => ({
+      ...c,
+      createdAt: c.createdAt?.toDate ? c.createdAt.toDate().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : c.createdAt,
+      answeredAt: c.answeredAt?.toDate ? c.answeredAt.toDate().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : c.answeredAt
+    }));
+  }
+
+  static async submitAnswer(questionId, answerText) {
+    try {
+      const docRef = db.collection('clarifications').doc(questionId);
+      const docSnap = await docRef.get();
+      
+      if (docSnap.exists) {
+        const reqId = docSnap.data().reqId;
+
+        await docRef.update({
+          answer: answerText,
+          status: "Answered",
+          answeredAt: admin.firestore.FieldValue.serverTimestamp() 
+        });
+
+        const reqSnapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
+        if (!reqSnapshot.empty) {
+           await reqSnapshot.docs[0].ref.update({ status: "In Analysis" });
+        }
+      }
+      return true;
+    } catch (error) {
+      console.error("Error updating answer in Firestore:", error);
+      throw new Error("Failed to submit answer to database");
+    }
   }
 }
 

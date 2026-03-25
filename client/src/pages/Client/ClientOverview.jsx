@@ -1,4 +1,4 @@
-import { useState } from "react"; // <-- Import useState
+import { useState } from "react"; 
 import ClientTopBar from "../../components/Client/ClientTopBar";
 import ClientSidebar from "../../components/Client/ClientSidebar";
 import ClientOverviewCards from "../../components/Client/ClientOverviewCards";
@@ -6,14 +6,13 @@ import ClientProjectProgress from "../../components/Client/ClientProjectProgress
 import ClientChangeRequests from "../../components/Client/ClientChangeRequests";
 import ClientActionItems from "../../components/Client/ClientActionItems";
 import ClientRecentActivity from "../../components/Client/ClientRecentActivity";
-import NewProjectModal from "../../components/Client/NewProjectModal"; // <-- 1. Import the Modal
+import NewProjectModal from "../../components/Client/NewProjectModal"; 
 import { useAuth } from "../../contexts/AuthContext";
 import { Plus } from "lucide-react";
 
 export default function ClientDashboard() {
   const { userData } = useAuth(); 
   
-  // 2. Add state to control the modal
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const getFirstName = (fullName) => {
@@ -31,7 +30,6 @@ export default function ClientDashboard() {
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
       
-      {/* 3. Drop the Modal Component here */}
       <NewProjectModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
@@ -39,7 +37,8 @@ export default function ClientDashboard() {
 
       <ClientTopBar />
 
-      <div className="flex max-w-[1600px] mx-auto pt-6 px-6 gap-8">
+      {/* Adjusted padding for mobile screens */}
+      <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
         
         <div className="hidden lg:block w-64 flex-shrink-0">
           <ClientSidebar />
@@ -47,29 +46,32 @@ export default function ClientDashboard() {
 
         <div className="flex-1 pb-10">
           
-          <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div className="mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-navy">Overview</h1>
-              <p className="text-gray-500 mt-1 text-sm">
+              <h1 className="text-[22px] md:text-2xl font-bold text-navy">Overview</h1>
+              <p className="text-gray-500 mt-1 text-[13px] md:text-sm">
                 {getTimeBasedGreeting()}, {getFirstName(userData?.fullName)}. Here's your project summary.
               </p>
             </div>
             
-            {/* 4. Connect the button to open the modal! */}
+            {/* Button stretches to full width on mobile for easy thumb tapping */}
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="bg-primary hover:bg-blue-600 text-white px-6 py-2.5 rounded-full font-semibold flex items-center transition-colors shadow-sm flex-shrink-0"
+              className="w-full sm:w-auto justify-center bg-primary hover:bg-blue-600 text-white px-6 py-3 sm:py-2.5 rounded-xl sm:rounded-full font-bold flex items-center transition-colors shadow-sm flex-shrink-0 text-sm"
             >
               <Plus className="w-5 h-5 mr-2" strokeWidth={3} />
               New Project
             </button>
           </div>
           
-          <ClientOverviewCards />
-          <ClientProjectProgress />
-          <ClientChangeRequests />
-          <ClientActionItems />
-          <ClientRecentActivity />
+          {/* Note: Ensure the individual components below also use standard Tailwind responsive classes (like grid-cols-1 md:grid-cols-2) in their own files! */}
+          <div className="space-y-6 md:space-y-8">
+            <ClientOverviewCards />
+            <ClientProjectProgress />
+            <ClientChangeRequests />
+            <ClientActionItems />
+            <ClientRecentActivity />
+          </div>
 
         </div>
       </div>

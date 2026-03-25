@@ -9,27 +9,20 @@ export default function ClientTopBar() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Mobile Menu State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Dropdown States
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   
-  // Notification States
   const [notifications, setNotifications] = useState([]);
   const [hasNewNotifications, setHasNewNotifications] = useState(false); 
   
-  // Refs to handle clicking outside to close boxes
   const profileRef = useRef(null);
   const notifRef = useRef(null);
   
-  // Search States
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
 
-  // Navigation links for the mobile drawer
   const navLinks = [
     { name: "Overview", path: "/dashboard", icon: LayoutGrid },
     { name: "My Requests", path: "/client/requests", icon: FileText },
@@ -39,7 +32,28 @@ export default function ClientTopBar() {
     { name: "Archive", path: "/client/archive", icon: Archive },
   ];
 
-  // --- FETCH NOTIFICATIONS ---
+  // NEW UNIFIED COLOR LOGIC (Matches all other pages perfectly)
+  const getStageStyle = (stage) => {
+    const s = stage?.toLowerCase() || "";
+    
+    if (s.includes("pending") || s.includes("review")) 
+      return "bg-orange-50 text-orange-600 ring-1 ring-orange-500/20";
+    if (s.includes("analysis")) 
+      return "bg-yellow-50 text-yellow-600 ring-1 ring-yellow-500/20";
+    if (s.includes("clarification")) 
+      return "bg-red-50 text-red-600 ring-1 ring-red-500/20";
+    if (s.includes("develop")) 
+      return "bg-blue-50 text-blue-600 ring-1 ring-blue-500/20";
+    if (s.includes("uat")) 
+      return "bg-purple-50 text-purple-600 ring-1 ring-purple-500/20";
+    if (s.includes("change") || s.includes("modification")) 
+      return "bg-amber-50 text-amber-600 ring-1 ring-amber-500/20";
+    if (s.includes("live") || s.includes("complete") || s.includes("approved")) 
+      return "bg-green-50 text-green-600 ring-1 ring-green-500/20";
+      
+    return "bg-gray-50 text-gray-500 ring-1 ring-gray-500/20";
+  };
+
   useEffect(() => {
     const fetchNotifications = async () => {
       if (!currentUser?.uid || userData?.notifications?.inApp === false) {
@@ -47,7 +61,6 @@ export default function ClientTopBar() {
         setNotifications([]);
         return;
       }
-
       try {
         const response = await fetch(`http://localhost:5000/api/client/notifications?uid=${currentUser.uid}`);
         const data = await response.json();
@@ -59,19 +72,13 @@ export default function ClientTopBar() {
         console.error("Error fetching notifications:", error);
       }
     };
-    
     fetchNotifications();
   }, [currentUser, userData?.notifications?.inApp]);
 
-  // Handle click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
-        setIsProfileOpen(false);
-      }
-      if (notifRef.current && !notifRef.current.contains(event.target)) {
-        setIsNotifOpen(false);
-      }
+      if (profileRef.current && !profileRef.current.contains(event.target)) setIsProfileOpen(false);
+      if (notifRef.current && !notifRef.current.contains(event.target)) setIsNotifOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -93,9 +100,10 @@ export default function ClientTopBar() {
 
   const handleSearch = async (e) => {
     if (e.key === 'Enter' && searchTerm.trim() !== "") {
+      if (!currentUser?.uid) return;
       setIsSearching(true);
       try {
-        const response = await fetch(`http://localhost:5000/api/client/search?q=${searchTerm}`);
+        const response = await fetch(`http://localhost:5000/api/client/search?q=${searchTerm}&uid=${currentUser.uid}`);
         const data = await response.json();
         if (data.success) setSearchResults(data.data);
       } catch (error) {
@@ -106,21 +114,17 @@ export default function ClientTopBar() {
     }
   };
 
-  // --- BELL ICON CLICK HANDLER ---
   const handleBellClick = async () => {
     setIsNotifOpen(!isNotifOpen);
     setIsProfileOpen(false); 
-    
     if (hasNewNotifications) {
       setHasNewNotifications(false);
-      
       try {
         await fetch('http://localhost:5000/api/client/notifications/read', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json'},
           body: JSON.stringify({ uid: currentUser.uid })
         });
-        
         setNotifications(prev => prev.map(n => ({...n, isRead: true})));
       } catch (error) {
         console.error("Failed to mark notifications read", error);
@@ -132,12 +136,8 @@ export default function ClientTopBar() {
     <>
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 h-20 flex items-center justify-between px-4 md:px-6">
         
-        {/* LEFT SIDE: Hamburger & Logo */}
         <div className="flex items-center flex-shrink-0 w-auto md:w-64">
-          <button 
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="mr-3 p-2 text-gray-500 hover:bg-gray-50 rounded-lg lg:hidden"
-          >
+          <button onClick={() => setIsMobileMenuOpen(true)} className="mr-3 p-2 text-gray-500 hover:bg-gray-50 rounded-lg lg:hidden">
             <Menu className="w-6 h-6" />
           </button>
           <Link to="/dashboard">
@@ -145,7 +145,6 @@ export default function ClientTopBar() {
           </Link>
         </div>
 
-        {/* CENTER: SEARCH BAR (Hidden on Mobile) */}
         <div className="hidden md:flex flex-1 max-w-2xl px-4 relative">
           <div className="relative w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -154,34 +153,25 @@ export default function ClientTopBar() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleSearch} 
-              placeholder="Search by ID (e.g., 1004) or Title and press Enter..." 
+              placeholder="Search by ID (e.g., REQ-1001) or Title and press Enter..." 
               className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 pl-12 pr-10 py-3 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all border border-transparent focus:border-blue-100"
             />
-            {isSearching && (
-              <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary animate-spin" />
-            )}
+            {isSearching && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary animate-spin" />}
             {searchTerm && !isSearching && (
-              <button 
-                onClick={() => { setSearchTerm(''); setSearchResults(null); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={() => { setSearchTerm(''); setSearchResults(null); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* DROPDOWN RESULTS */}
           {searchResults && (
             <div className="absolute top-full left-4 right-4 mt-2 bg-white border border-gray-100 rounded-xl shadow-lg p-2 z-50 max-h-80 overflow-y-auto">
               <div className="flex justify-between items-center px-3 py-2 border-b border-gray-50 mb-2">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                   {searchResults.length} Result{searchResults.length !== 1 && 's'} Found
                 </span>
-                <button onClick={() => setSearchResults(null)} className="text-xs text-red-500 hover:underline font-semibold">
-                  Close
-                </button>
+                <button onClick={() => setSearchResults(null)} className="text-xs text-red-500 hover:underline font-semibold">Close</button>
               </div>
-              
               {searchResults.length === 0 ? (
                 <p className="text-sm text-gray-500 p-4 text-center">No requirements match your search.</p>
               ) : (
@@ -193,7 +183,7 @@ export default function ClientTopBar() {
                         <span className="text-xs text-gray-500 truncate">{req.title}</span>
                       </div>
                     </div>
-                    <span className="text-[10px] bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md font-bold flex-shrink-0 group-hover:bg-blue-50 group-hover:text-primary transition-colors">
+                    <span className={`text-[10px] px-2.5 py-1 rounded-md font-bold flex-shrink-0 whitespace-nowrap ${getStageStyle(req.status)}`}>
                       {req.status}
                     </span>
                   </div>
@@ -203,31 +193,18 @@ export default function ClientTopBar() {
           )}
         </div>
 
-        {/* RIGHT CONTROLS: Notifs & Profile */}
         <div className="flex items-center space-x-2 md:space-x-6 flex-shrink-0">
-          
-          {/* NOTIFICATION BELL CONTAINER */}
           <div className="relative" ref={notifRef}>
-            <button 
-              className={`relative p-2 text-gray-500 hover:text-navy transition-colors rounded-full ${isNotifOpen ? 'bg-blue-50 text-primary' : 'hover:bg-gray-50'}`}
-              onClick={handleBellClick}
-            >
+            <button className={`relative p-2 text-gray-500 hover:text-navy transition-colors rounded-full ${isNotifOpen ? 'bg-blue-50 text-primary' : 'hover:bg-gray-50'}`} onClick={handleBellClick}>
               <Bell className="w-5 h-5 md:w-6 md:h-6" />
-              {hasNewNotifications && (
-                <span className="absolute top-1.5 right-1.5 block h-2 md:h-2.5 w-2 md:w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
-              )}
+              {hasNewNotifications && <span className="absolute top-1.5 right-1.5 block h-2 md:h-2.5 w-2 md:w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>}
             </button>
-
-            {/* NOTIFICATION DROPDOWN BOX */}
             {isNotifOpen && (
               <div className="absolute right-0 mt-3 w-72 md:w-80 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
                   <p className="font-bold text-navy text-sm">Notifications</p>
-                  {userData?.notifications?.inApp === false && (
-                    <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold">Disabled</span>
-                  )}
+                  {userData?.notifications?.inApp === false && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold">Disabled</span>}
                 </div>
-                
                 <div className="max-h-80 overflow-y-auto">
                   {userData?.notifications?.inApp === false ? (
                     <div className="p-6 text-center">
@@ -251,31 +228,16 @@ export default function ClientTopBar() {
             )}
           </div>
 
-          {/* USER PROFILE DROPDOWN CONTAINER */}
           <div className="relative" ref={profileRef}>
-            <button 
-              onClick={() => {
-                setIsProfileOpen(!isProfileOpen);
-                setIsNotifOpen(false); 
-              }}
-              className="flex items-center space-x-2 md:space-x-3 focus:outline-none group"
-            >
+            <button onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }} className="flex items-center space-x-2 md:space-x-3 focus:outline-none group">
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs md:text-sm shadow-sm group-hover:shadow-md transition-shadow overflow-hidden ring-2 ring-white">
-                {userData?.profileImage ? (
-                  <img src={userData.profileImage} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  getInitials(userData?.fullName)
-                )}
+                {userData?.profileImage ? <img src={userData.profileImage} alt="Profile" className="w-full h-full object-cover" /> : getInitials(userData?.fullName)}
               </div>
-
               <div className="hidden md:flex items-center space-x-1">
-                <span className="text-sm font-semibold text-navy">
-                  {userData?.fullName || "Loading..."}
-                </span>
+                <span className="text-sm font-semibold text-navy">{userData?.fullName || "Loading..."}</span>
                 <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isProfileOpen ? "rotate-180" : ""}`} />
               </div>
             </button>
-
             {isProfileOpen && (
               <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
                 <div className="px-5 py-3 border-b border-gray-50">
@@ -283,20 +245,11 @@ export default function ClientTopBar() {
                   <p className="text-xs text-gray-500 truncate mt-0.5">{userData?.email}</p>
                 </div>
                 <div className="py-2">
-                  <Link 
-                    to="/client/settings" 
-                    className="flex items-center px-5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    onClick={() => setIsProfileOpen(false)}
-                  >
-                    <User className="w-4 h-4 mr-3 text-gray-400" />
-                    Profile & Settings
+                  <Link to="/client/settings" className="flex items-center px-5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors" onClick={() => setIsProfileOpen(false)}>
+                    <User className="w-4 h-4 mr-3 text-gray-400" /> Profile & Settings
                   </Link>
-                  <button 
-                    onClick={handleLogout}
-                    className="w-full flex items-center px-5 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
-                  >
-                    <LogOut className="w-4 h-4 mr-3 text-red-500" />
-                    Log Out
+                  <button onClick={handleLogout} className="w-full flex items-center px-5 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left">
+                    <LogOut className="w-4 h-4 mr-3 text-red-500" /> Log Out
                   </button>
                 </div>
               </div>
@@ -305,47 +258,26 @@ export default function ClientTopBar() {
         </div>
       </header>
 
-      {/* MOBILE MENU SLIDE-OUT DRAWER */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
-          {/* Dark Overlay */}
-          <div 
-            className="fixed inset-0 bg-navy/40 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsMobileMenuOpen(false)}
-          ></div>
-          
-          {/* Drawer */}
+          <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm transition-opacity" onClick={() => setIsMobileMenuOpen(false)}></div>
           <div className="relative w-72 max-w-[80vw] bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-left duration-300">
             <div className="p-6 flex justify-between items-center border-b border-gray-50">
               <img src={logoDark} alt="NexBA Logo" className="h-6 w-auto object-contain" />
-              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-gray-400 hover:text-red-500 rounded-lg bg-gray-50">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-gray-400 hover:text-red-500 rounded-lg bg-gray-50"><X className="w-5 h-5" /></button>
             </div>
-
             <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
               <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Menu</p>
               {navLinks.map((link) => {
                 const isActive = location.pathname === link.path;
                 const Icon = link.icon;
                 return (
-                  <Link
-                    key={link.name}
-                    to={link.path}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`flex items-center px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                      isActive 
-                        ? 'bg-blue-50 text-primary' 
-                        : 'text-gray-500 hover:bg-gray-50 hover:text-navy'
-                    }`}
-                  >
-                    <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-primary' : 'text-gray-400'}`} />
-                    {link.name}
+                  <Link key={link.name} to={link.path} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center px-4 py-3 rounded-xl text-sm font-semibold transition-all ${isActive ? 'bg-blue-50 text-primary' : 'text-gray-500 hover:bg-gray-50 hover:text-navy'}`}>
+                    <Icon className={`w-5 h-5 mr-3 ${isActive ? 'text-primary' : 'text-gray-400'}`} /> {link.name}
                   </Link>
                 );
               })}
             </div>
-
             <div className="p-6 border-t border-gray-50">
               <Link to="/client/settings" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center px-4 py-3 text-gray-500 hover:text-navy text-sm font-semibold mb-2 rounded-xl hover:bg-gray-50">
                 <Settings className="w-5 h-5 mr-3 text-gray-400" /> Settings

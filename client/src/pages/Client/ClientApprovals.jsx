@@ -79,24 +79,25 @@ export default function ClientApprovals() {
     <div className="min-h-screen bg-[#F5F7FA]">
       <ClientTopBar />
 
-      <div className="flex max-w-[1600px] mx-auto pt-6 px-6 gap-8">
+      <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
         <div className="hidden lg:block w-64 flex-shrink-0">
           <ClientSidebar />
         </div>
 
-        <div className="flex-1 pb-10 flex flex-col h-[calc(100vh-100px)]">
+        {/* Removed fixed height constraint for mobile scrolling */}
+        <div className="flex-1 pb-10 flex flex-col h-full lg:h-[calc(100vh-100px)]">
           
           {/* Main Page Header */}
           <div className="mb-6 flex-shrink-0">
-            <h1 className="text-2xl font-bold text-navy">Approvals</h1>
-            <p className="text-gray-500 mt-1 text-sm">Review evidence and approve or request changes.</p>
+            <h1 className="text-[22px] font-bold text-navy">Approvals</h1>
+            <p className="text-gray-500 mt-1 text-[13px]">Review evidence and approve or request changes.</p>
           </div>
 
-          {/* Main Split Layout exactly like image_3.png */}
-          <div className="flex gap-6 flex-1 min-h-0">
+          {/* Main Split Layout: flex-col on mobile, flex-row on desktop */}
+          <div className="flex flex-col lg:flex-row gap-6 flex-1 lg:min-h-0">
             
             {/* LEFT COLUMN: Awaiting Review List */}
-            <div className="w-1/3 bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col overflow-hidden">
+            <div className="w-full lg:w-[350px] bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col overflow-hidden flex-shrink-0 h-[350px] lg:h-auto">
               <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <h3 className="font-bold text-navy text-sm">Awaiting Review ({approvals.length})</h3>
               </div>
@@ -117,7 +118,7 @@ export default function ClientApprovals() {
                           : 'border-transparent hover:bg-gray-50 hover:border-gray-100'
                       }`}
                     >
-                      <div className="flex items-center space-x-2 mb-2">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
                         <span className="text-[10px] font-bold text-gray-400">{item.reqId}</span>
                         
                         {/* Evidence & BA Tags */}
@@ -127,7 +128,7 @@ export default function ClientApprovals() {
                           </span>
                         )}
                         {item.baVerified && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 flex items-center ml-1">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 flex items-center">
                             <CheckCircle2 className="w-3 h-3 mr-1" /> BA Verified
                           </span>
                         )}
@@ -142,12 +143,12 @@ export default function ClientApprovals() {
             </div>
 
             {/* RIGHT COLUMN: Detailed Evidence View */}
-            <div className="flex-1 bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col overflow-hidden">
+            <div className="flex-1 bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col overflow-hidden min-h-[500px] lg:min-h-0">
               {selectedItem ? (
                 <>
-                  {/* Right Header exactly like image_3.png */}
-                  <div className="p-8 border-b border-gray-100 bg-gray-50/50">
-                    <div className="flex items-center space-x-2 mb-3">
+                  {/* Right Header */}
+                  <div className="p-6 md:p-8 border-b border-gray-100 bg-gray-50/50">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
                       <span className="text-xs font-bold text-gray-400">{selectedItem.reqId}</span>
                         {selectedItem.evidenceSubmitted && (
                           <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-green-100 text-green-600 flex items-center">
@@ -155,40 +156,39 @@ export default function ClientApprovals() {
                           </span>
                         )}
                         {selectedItem.baVerified && (
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-blue-100 text-blue-600 flex items-center ml-1">
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-blue-100 text-blue-600 flex items-center">
                             <CheckCircle2 className="w-3 h-3 mr-1" /> BA Verified
                           </span>
                         )}
                     </div>
-                    <h2 className="text-xl font-bold text-navy">{selectedItem.title}</h2>
-                    <p className="text-sm text-gray-500 mt-1">Evidence from {selectedItem.submittedBy} • Completed {selectedItem.submittedAt}</p>
+                    <h2 className="text-xl font-bold text-navy leading-snug">{selectedItem.title}</h2>
+                    <p className="text-sm text-gray-500 mt-2">Evidence from {selectedItem.submittedBy} • Completed {selectedItem.submittedAt}</p>
                   </div>
 
                   {/* Scrollable Content */}
-                  <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                  <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 md:space-y-8">
                     
-                    {/* Screenshot Evidence Placeholder style from image_3.png */}
+                    {/* Screenshot Evidence */}
                     <div>
                       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Screenshot Evidence</h3>
                       <div className="aspect-[16/9] w-full max-w-lg bg-gray-50 rounded-3xl border border-gray-100 flex items-center justify-center text-gray-300 shadow-inner">
                         {selectedItem.evidenceImage ? (
                           <img src={selectedItem.evidenceImage} alt="Evidence" className="h-full w-full object-contain rounded-3xl" />
                         ) : (
-                          // Placeholder icon exactly mirroring the UI design
-                          <ImageIcon className="w-16 h-16" />
+                          <ImageIcon className="w-12 h-12 md:w-16 md:h-16" />
                         )}
                       </div>
                     </div>
 
-                    {/* Commit Link Area from image_3.png */}
+                    {/* Commit Link Area */}
                     <div>
                       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center"><Github className="w-4 h-4 mr-2"/> Commit Link</h3>
-                      <a href={selectedItem.commitLink} target="_blank" rel="noopener noreferrer" className="p-5 bg-blue-50/50 rounded-2xl border border-blue-100 text-primary text-sm font-medium hover:underline flex items-center">
+                      <a href={selectedItem.commitLink} target="_blank" rel="noopener noreferrer" className="p-4 md:p-5 bg-blue-50/50 rounded-2xl border border-blue-100 text-primary text-sm font-medium hover:underline flex items-center break-all">
                          {selectedItem.commitLink}
                       </a>
                     </div>
 
-                    {/* View Original Requirement Accordion style from image_3.png */}
+                    {/* View Original Requirement Accordion */}
                     <div className="bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
                       <details className="group p-5">
                         <summary className="flex justify-between items-center font-bold text-navy text-sm cursor-pointer list-none">
@@ -203,30 +203,28 @@ export default function ClientApprovals() {
 
                   </div>
 
-                  {/* Right Footer Buttons exactly mirroring image_3.png */}
-                  <div className="px-8 py-6 border-t border-gray-100 flex justify-end gap-3 bg-white">
+                  {/* Right Footer Buttons */}
+                  <div className="p-6 md:px-8 md:py-6 border-t border-gray-100 flex flex-col sm:flex-row justify-end gap-3 bg-white">
                     <button 
                       onClick={() => setIsModalOpen(true)} 
-                      // Orange-fallback styled button with icon
-                      className="text-orange-500 bg-white border border-orange-200 hover:bg-orange-50 px-6 py-3 rounded-2xl font-bold transition-all text-sm flex items-center"
+                      className="w-full sm:w-auto text-orange-500 bg-white border border-orange-200 hover:bg-orange-50 px-6 py-3 rounded-2xl font-bold transition-all text-sm flex items-center justify-center"
                     >
                       <AlertTriangle className="w-4 h-4 mr-2" /> Request Change
                     </button>
                     <button 
                       onClick={handleApprove}
                       disabled={isSubmittingApproval}
-                      // Solid green styled button with icon
-                      className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-2xl font-bold transition-all disabled:opacity-50 text-sm flex items-center shadow-lg shadow-green-200"
+                      className="w-full sm:w-auto bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-2xl font-bold transition-all disabled:opacity-50 text-sm flex items-center justify-center shadow-lg shadow-green-200"
                     >
-                      {isSubmittingApproval ? 'Approving...' : <><CheckCircle2 className="w-4 h-4 mr-2" /> Approve</>}
+                      {isSubmittingApproval ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                      {isSubmittingApproval ? 'Approving...' : 'Approve'}
                     </button>
                   </div>
                 </>
               ) : (
-                // Empty state if nothing is selected
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-10 text-center">
+                <div className="flex-1 flex flex-col items-center justify-center text-gray-400 py-20 lg:py-0 px-6 text-center">
                   <CheckCircle2 className="w-16 h-16 mb-6 text-gray-200" />
-                  <p className='font-bold text-navy'>Requirement Review</p>
+                  <p className='font-bold text-navy text-lg'>Requirement Review</p>
                   <p className='text-sm mt-2 max-w-sm'>Select a requirement from the list on the left to review its submitted evidence and commit history.</p>
                 </div>
               )}

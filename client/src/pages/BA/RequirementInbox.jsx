@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { LayoutGrid, List, FileText, File, Calendar, User, ArrowRight, Loader2, Inbox, UserPlus } from "lucide-react";
+import { LayoutGrid, List, FileText, File, Calendar, User, ArrowRight, Loader2, Inbox, UserPlus, Activity } from "lucide-react";
 
 export default function RequirementInbox() {
   const { currentUser, userData } = useAuth();
@@ -40,11 +40,18 @@ export default function RequirementInbox() {
     setViewMode("list");
   };
 
-  const handleClaimAndProcess = async (reqId) => {
+  const handleActionClick = async (req) => {
+    // IF ALREADY CLAIMED: Just go straight to the workspace!
+    if (!req.isNew) {
+      navigate(`/ba/analysis?reqId=${req.id}`);
+      return;
+    }
+
+    // IF NEW: Claim it first, then go to workspace
     setIsClaiming(true);
     try {
       const baName = userData?.fullName || "Bhashi Fernando";
-      const res = await fetch(`http://localhost:5000/api/ba/claim/${reqId}?uid=${currentUser.uid}`, {
+      const res = await fetch(`http://localhost:5000/api/ba/claim/${req.id}?uid=${currentUser.uid}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ baName })
@@ -52,7 +59,7 @@ export default function RequirementInbox() {
       
       const json = await res.json();
       if (json.success) {
-        navigate(`/ba/analysis?reqId=${reqId}`);
+        navigate(`/ba/analysis?reqId=${req.id}`);
       } else {
         alert("Failed to claim. Another BA might have already grabbed this requirement!");
         fetchInbox(); 
@@ -90,14 +97,13 @@ export default function RequirementInbox() {
           <BASidebar />
         </div>
 
-        {/* Removed fixed height constraint so mobile can scroll normally when stacked */}
         <div className="flex-1 pb-10 flex flex-col h-full lg:h-[calc(100vh-100px)]">
           
           {/* HEADER & TOGGLE */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-6 flex-shrink-0 gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-navy">Global Inbox</h1>
-              <p className="text-gray-500 mt-1 text-sm">{requirements.length} unclaimed requirements available.</p>
+              <h1 className="text-2xl font-bold text-navy">Requirement Inbox</h1>
+              <p className="text-gray-500 mt-1 text-sm">{requirements.length} active requirements in your inbox.</p>
             </div>
             
             <div className="flex bg-white rounded-xl shadow-sm border border-gray-100 p-1 self-start sm:self-auto">
@@ -122,7 +128,7 @@ export default function RequirementInbox() {
                 <Inbox className="w-10 h-10 text-primary" />
               </div>
               <h2 className="text-xl font-bold text-navy">Inbox Zero!</h2>
-              <p className="text-gray-500 mt-2 text-center px-4">All client requirements have been claimed by your team.</p>
+              <p className="text-gray-500 mt-2 text-center px-4">All client requirements have been claimed or completed.</p>
             </div>
           ) : viewMode === "cards" ? (
             
@@ -144,6 +150,12 @@ export default function RequirementInbox() {
                         <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${req.priority === 'High' ? 'bg-red-50 text-red-600' : req.priority === 'Medium' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>
                           {req.priority}
                         </span>
+                        {/* Status Badge added to cards for clarity */}
+                        {!req.isNew && (
+                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-purple-50 text-purple-600">
+                            {req.status}
+                          </span>
+                        )}
                       </div>
                       {req.isNew && (
                         <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]"></div>
@@ -168,13 +180,16 @@ export default function RequirementInbox() {
 
           ) : (
 
-            /* LIST VIEW (Now fully responsive: stacks on mobile, side-by-side on desktop) */
+            /* LIST VIEW */
             <div className="flex flex-col lg:flex-row gap-6 flex-1 lg:min-h-0">
               
-              {/* LEFT PANE - Full width on mobile, fixed width on desktop */}
+              {/* LEFT PANE */}
               <div className="w-full lg:w-80 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-shrink-0 h-[350px] lg:h-auto">
-                <div className="p-4 border-b border-gray-50 flex items-center text-gray-500 font-semibold text-sm flex-shrink-0">
-                  <Inbox className="w-4 h-4 mr-2" /> Unassigned ({requirements.length})
+                <div className="p-4 border-b border-gray-50 flex items-center justify-between text-gray-500 font-semibold text-sm flex-shrink-0">
+                  <div className="flex items-center">
+                    <Inbox className="w-4 h-4 mr-2" /> Inbox
+                  </div>
+                  <span className="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full">{requirements.length}</span>
                 </div>
                 <div className="overflow-y-auto flex-1 p-2 space-y-1">
                   {requirements.map(req => (
@@ -204,7 +219,7 @@ export default function RequirementInbox() {
                 </div>
               </div>
 
-              {/* RIGHT PANE - Full flex on both mobile and desktop */}
+              {/* RIGHT PANE */}
               {selectedReq && (
                 <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col min-h-[500px] lg:min-h-0">
                   
@@ -252,29 +267,47 @@ export default function RequirementInbox() {
                       </div>
                     )}
 
-                    <div className="bg-blue-50/50 p-5 md:p-6 rounded-2xl border border-blue-100 flex items-start">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 text-primary flex items-center justify-center flex-shrink-0 mr-4 mt-0.5">
-                        <UserPlus className="w-5 h-5" />
+                    {/* DYNAMIC MESSAGE BOX based on whether it is new or claimed */}
+                    {selectedReq.isNew ? (
+                      <div className="bg-blue-50/50 p-5 md:p-6 rounded-2xl border border-blue-100 flex items-start">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-primary flex items-center justify-center flex-shrink-0 mr-4 mt-0.5">
+                          <UserPlus className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-primary text-sm mb-1">
+                            Unassigned Requirement
+                          </h4>
+                          <p className="text-sm text-blue-900/70 leading-relaxed">
+                            This requirement is waiting in the global inbox. Claim it to move it to your personal workspace and begin the AI Analysis process.
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-primary text-sm mb-1">
-                          Unassigned Requirement
-                        </h4>
-                        <p className="text-sm text-blue-900/70 leading-relaxed">
-                          This requirement is waiting in the global inbox. Claim it to move it to your personal workspace and begin the AI Analysis process.
-                        </p>
+                    ) : (
+                      <div className="bg-green-50/50 p-5 md:p-6 rounded-2xl border border-green-200 flex items-start">
+                        <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0 mr-4 mt-0.5">
+                          <Activity className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-green-700 text-sm mb-1">
+                            Active Requirement
+                          </h4>
+                          <p className="text-sm text-green-900/70 leading-relaxed">
+                            You have successfully claimed this requirement. It is currently in the <strong className="text-green-800">{selectedReq.status}</strong> phase.
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
+                  {/* DYNAMIC BUTTON */}
                   <div className="p-6 border-t border-gray-50 flex justify-end items-center flex-shrink-0 bg-white rounded-b-3xl">
                     <button 
-                      onClick={() => handleClaimAndProcess(selectedReq.id)}
+                      onClick={() => handleActionClick(selectedReq)}
                       disabled={isClaiming}
                       className="w-full md:w-auto justify-center bg-primary hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl font-bold text-sm transition-colors shadow-[0_4px_14px_0_rgba(10,102,194,0.39)] hover:shadow-[0_6px_20px_rgba(10,102,194,0.23)] flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isClaiming ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                      {isClaiming ? "Claiming..." : "Claim & Analyze"} 
+                      {isClaiming ? "Processing..." : selectedReq.isNew ? "Claim & Analyze" : "Open AI Workspace"} 
                       {!isClaiming && <ArrowRight className="w-4 h-4 ml-2" />}
                     </button>
                   </div>

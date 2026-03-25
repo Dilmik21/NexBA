@@ -1,39 +1,41 @@
 const express = require('express');
 const router = express.Router();
 const clientController = require('../controllers/clientController');
+const baController = require('../controllers/baController'); // <-- NEW: Import BA Controller
 
-// --- DASHBOARD & PROJECT ROUTES ---
-router.post('/projects', clientController.submitProject);
-router.get('/overview-stats', clientController.getOverviewStats);
-router.get('/project-progress', clientController.getProjectProgress);
-router.get('/change-requests', clientController.getChangeRequests);
-router.get('/action-items', clientController.getActionItems);
-router.get('/recent-activity', clientController.getRecentActivity);
-router.get('/search', clientController.searchRequirements);
-router.get('/requests', clientController.getAllRequests);
+// Ensure the middleware is applied to ALL routes
+const auth = clientController.requireUid;
 
-// --- CLARIFICATION ROUTES (Perfectly synced with frontend POST) ---
-router.get('/clarifications', clientController.getClarifications);
-router.post('/clarifications/:id/answer', clientController.answerClarification);
+router.post('/projects', auth, clientController.submitProject);
+router.get('/overview-stats', auth, clientController.getOverviewStats);
+router.get('/project-progress', auth, clientController.getProjectProgress);
+router.get('/change-requests', auth, clientController.getChangeRequests);
+router.get('/action-items', auth, clientController.getActionItems);
+router.get('/recent-activity', auth, clientController.getRecentActivity);
+router.get('/search', auth, clientController.searchRequirements);
+router.get('/requests', auth, clientController.getAllRequests);
 
-// --- APPROVAL ROUTES ---
-router.get('/approvals', clientController.getApprovals);
-router.post('/approvals/:id/approve', clientController.approveRequirement);
-router.post('/approvals/:id/request-change', clientController.requestChangeForRequirement);
+// Clarifications & Messages
+router.get('/clarifications', auth, clientController.getClarifications);
 
-// --- MESSAGE & ARCHIVE ROUTES ---
-router.get('/messages', clientController.getMessages);
-router.post('/messages', clientController.sendMessage);
-router.get('/archive', clientController.getArchivedRequirements);
+// <-- CRITICAL FIX: Use baController for the answer logic!
+router.post('/clarifications/:id/answer', auth, baController.answerClarification);
 
-// --- SETTINGS ROUTES ---
-router.get('/settings', clientController.getSettings);
-router.put('/settings/general', clientController.updateGeneralSettings);
-router.put('/settings/security', clientController.updateSecuritySettings);
-router.put('/settings/notifications', clientController.updateNotificationSettings);
+router.get('/messages', auth, clientController.getMessages);
+router.post('/messages', auth, clientController.sendMessage);
 
-// --- NOTIFICATION ROUTES ---
-router.get('/notifications', clientController.getNotifications);
-router.put('/notifications/read', clientController.markNotificationsRead);
+// Approvals & Archive
+router.get('/approvals', auth, clientController.getApprovals);
+router.post('/approvals/:id/approve', auth, clientController.approveRequirement);
+router.post('/approvals/:id/request-change', auth, clientController.requestChangeForRequirement);
+router.get('/archive', auth, clientController.getArchivedRequirements);
+
+// Settings
+router.get('/settings', auth, clientController.getSettings);
+router.put('/settings/general', auth, clientController.updateGeneralSettings);
+router.put('/settings/security', auth, clientController.updateSecuritySettings);
+router.put('/settings/notifications', auth, clientController.updateNotificationSettings);
+router.get('/notifications', auth, clientController.getNotifications);
+router.put('/notifications/read', auth, clientController.markNotificationsRead);
 
 module.exports = router;

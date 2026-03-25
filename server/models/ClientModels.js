@@ -1,3 +1,4 @@
+// --- IMPORTING OUR MODELS ---
 const { admin, db } = require('../config/firebase');
 
 // --- SMART HELPERS ---
@@ -16,11 +17,13 @@ const getTimeAgo = (timestamp) => {
 
 class RequirementModel {
   static async submitProject(projectData, uid) {
+    const safeUid = uid || projectData.uid || "GUEST_USER";
+
     let clientName = "Unknown Client";
     let companyName = "Unknown Company";
 
-    if (uid) {
-      const userDoc = await db.collection('users').doc(uid).get();
+    if (safeUid !== "GUEST_USER") {
+      const userDoc = await db.collection('users').doc(safeUid).get();
       if (userDoc.exists) {
         const userData = userDoc.data();
         clientName = userData.fullName || userData.name || "Unknown Client";
@@ -41,25 +44,28 @@ class RequirementModel {
     }
     
     const newRequirement = {
-      ...projectData,                     
+      title: projectData.title || "Untitled Project",
+      description: projectData.description || "No description provided.",
       reqId: customReqId,
-      clientId: uid, // STRICT ISOLATION: Locks this requirement to this client
-      baId: "",      // Empty so BAs can claim it
+      uid: safeUid, // CORRECT FIELD NAME
+      baId: "",      
       clientName: clientName,             
       submittedBy: clientName,            
       company: companyName,               
       riskLevel: normalizedRisk,          
       risk: normalizedRisk,               
-      type: projectData.type || (projectData.fileUrl ? 'File' : 'Text'),
+      priority: normalizedRisk,
+      type: projectData.type === 'document' ? 'File' : 'Text',
       status: "Pending BA Review", 
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
-      progress: 0
+      progress: 0,
+      fileName: projectData.fileName || null
     };
 
     await db.collection('requirements').add(newRequirement);
 
     await db.collection('activity_logs').add({
-      clientId: uid, // ISOLATION
+      uid: safeUid, // CORRECT FIELD NAME
       user: clientName, 
       action: `Launched new request: ${projectData.title}`,
       time: admin.firestore.FieldValue.serverTimestamp(),
@@ -70,8 +76,51 @@ class RequirementModel {
     return customReqId;
   }
 
+  static async getAllRequests(uid) {
+    const safeUid = uid || "INVALID";
+    
+    // --- DEBUG LOGS ADDED HERE ---
+    console.log(`📡 [Backend DB]: Fetching ALL requests for UID -> ${safeUid}`);
+    
+    const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
+    
+    console.log(`✅ [Backend DB]: Found ${snapshot.docs.length} documents for this UID.`);
+    // -----------------------------
+
+    let requests = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      let formattedDate = "Pending";
+      let rawDate = 0;
+      if (data.submittedAt) {
+        const dateObj = data.submittedAt.toDate();
+        formattedDate = dateObj.toISOString().split('T')[0]; 
+        rawDate = dateObj.getTime();
+      }
+
+      requests.push({
+        id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
+        title: data.title,
+        type: data.type || 'Text',
+        date: formattedDate,
+        stage: data.status,
+        priority: data.priority || data.riskLevel || 'Medium',
+        rawDbId: doc.id,
+        description: data.description || "No description provided.",
+        fileName: data.fileName || "No file attached",
+        baName: data.baName || "Awaiting Assignment",
+        rawDate: rawDate
+      });
+    });
+
+    requests.sort((a, b) => b.rawDate - a.rawDate);
+    return requests;
+  }
+
   static async getOverviewStats(uid) {
-    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
+    const safeUid = uid || "INVALID";
+    const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     let stats = { totalActive: 0, pendingApprovals: 0, inAnalysis: 0, clarificationsNeeded: 0 };
 
     snapshot.forEach(doc => {
@@ -85,7 +134,8 @@ class RequirementModel {
   }
 
   static async getProjectProgress(uid) {
-    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
+    const safeUid = uid || "INVALID";
+    const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     let requirementsList = [];
     snapshot.forEach(doc => {
       const data = doc.data();
@@ -98,14 +148,14 @@ class RequirementModel {
       });
     });
     
-    // Sort in memory to avoid Firebase missing index errors
     requirementsList.sort((a, b) => (b.rawDate?.toMillis ? b.rawDate.toMillis() : 0) - (a.rawDate?.toMillis ? a.rawDate.toMillis() : 0));
     return requirementsList.slice(0, 5);
   }
 
   static async getChangeRequests(uid) {
+    const safeUid = uid || "INVALID";
     const snapshot = await db.collection('change_requests')
-      .where('clientId', '==', uid)
+      .where('uid', '==', safeUid) 
       .where('status', '!=', 'Resolved').get();
     let requests = [];
     snapshot.forEach(doc => {
@@ -123,8 +173,9 @@ class RequirementModel {
   }
 
   static async getActionItems(uid) {
+    const safeUid = uid || "INVALID";
     const snapshot = await db.collection('requirements')
-      .where('clientId', '==', uid)
+      .where('uid', '==', safeUid) 
       .where('status', 'in', ['Pending Approval', 'Clarification Needed']).get();
       
     let pendingApprovals = [], clarificationsNeeded = [];
@@ -142,25 +193,52 @@ class RequirementModel {
   }
 
   static async getRecentActivity(uid) {
-    const snapshot = await db.collection('activity_logs').where('clientId', '==', uid).get();
+    const safeUid = uid || "INVALID";
+    const snapshot = await db.collection('activity_logs').where('uid', '==', safeUid).get();
+    
+    let docs = [];
+    snapshot.forEach(doc => docs.push(doc));
+
+    // Sort all documents locally by time (newest first) to avoid Firebase Index errors
+    docs.sort((a, b) => {
+      const timeA = a.data().time?.toMillis ? a.data().time.toMillis() : 0;
+      const timeB = b.data().time?.toMillis ? b.data().time.toMillis() : 0;
+      return timeB - timeA; 
+    });
+
+    // --- CRITICAL FIX: THE DATABASE VACUUM CLEANER ---
+    // If this user has more than 5 activities saved, permanently delete the old ones!
+    if (docs.length > 5) {
+      const batch = db.batch();
+      for (let i = 5; i < docs.length; i++) {
+        batch.delete(docs[i].ref);
+      }
+      await batch.commit();
+      console.log(`🧹 [Auto-Cleanup]: Permanently deleted ${docs.length - 5} old activities for UID: ${safeUid}`);
+    }
+
     let activities = [];
-    snapshot.forEach(doc => {
+    
+    // Only process the top 5 documents
+    const top5Docs = docs.slice(0, 5);
+    
+    top5Docs.forEach(doc => {
       const data = doc.data();
       activities.push({
         id: data.reqId || doc.id.substring(0, 6),
         action: data.action,
-        time: "Recently",
-        dotColor: data.dotColor || "bg-gray-400",
+        time: getTimeAgo(data.time) || "Recently", // Made this dynamic so it shows exact time!
+        dotColor: data.dotColor || "bg-blue-500",
         rawDate: data.time || 0
       });
     });
 
-    activities.sort((a, b) => (b.rawDate?.toMillis ? b.rawDate.toMillis() : 0) - (a.rawDate?.toMillis ? a.rawDate.toMillis() : 0));
-    return activities.slice(0, 5);
+    return activities;
   }
 
   static async searchRequirements(searchQuery, uid) {
-    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
+    const safeUid = uid || "INVALID";
+    const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     let searchResults = [];
 
     snapshot.forEach(doc => {
@@ -179,42 +257,10 @@ class RequirementModel {
     return searchResults;
   }
 
-  static async getAllRequests(uid) {
-    const snapshot = await db.collection('requirements').where('clientId', '==', uid).get();
-    let requests = [];
-    
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      let formattedDate = "Pending";
-      let rawDate = 0;
-      if (data.submittedAt) {
-        const dateObj = data.submittedAt.toDate();
-        formattedDate = dateObj.toISOString().split('T')[0]; 
-        rawDate = dateObj.getTime();
-      }
-
-      requests.push({
-        id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
-        title: data.title,
-        type: data.type || 'text',
-        date: formattedDate,
-        stage: data.status,
-        priority: data.priority || data.riskLevel || 'Medium',
-        rawDbId: doc.id,
-        description: data.description || "No description provided.",
-        fileName: data.fileName || "No file attached",
-        baName: data.baName || "Awaiting Assignment",
-        rawDate: rawDate
-      });
-    });
-
-    requests.sort((a, b) => b.rawDate - a.rawDate);
-    return requests;
-  }
-
   static async getApprovals(uid) {
+    const safeUid = uid || "INVALID";
     const snapshot = await db.collection('requirements')
-      .where('clientId', '==', uid)
+      .where('uid', '==', safeUid) 
       .where('status', '==', 'Awaiting Review').get();
     let approvals = [];
     
@@ -267,8 +313,9 @@ class RequirementModel {
   }
 
   static async getArchivedRequirements(uid) {
+    const safeUid = uid || "INVALID";
     const snapshot = await db.collection('requirements')
-      .where('clientId', '==', uid)
+      .where('uid', '==', safeUid) 
       .where('status', 'in', ['Approved & Live', 'Closed — Superseded', 'Approved', 'Completed']).get();
     
     let archives = [];
@@ -315,8 +362,8 @@ class RequirementModel {
 
 class CommunicationModel {
   static async getClarifications(uid) {
-    // SECURITY: First, get all requirements that belong to THIS specific client
-    const reqsSnapshot = await db.collection('requirements').where('clientId', '==', uid).get();
+    const safeUid = uid || "INVALID";
+    const reqsSnapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     const requirementsMap = {};
     reqsSnapshot.forEach(doc => {
       const data = doc.data();
@@ -330,7 +377,6 @@ class CommunicationModel {
       const data = doc.data();
       const reqId = data.reqId || "Unknown";
       
-      // ONLY push the clarification if the client actually owns the parent requirement!
       if (requirementsMap[reqId]) {
         const parentReq = requirementsMap[reqId];
         let priority = parentReq.priority || parentReq.riskLevel || "Medium";
@@ -345,8 +391,8 @@ class CommunicationModel {
           priority: priority,
           isAI: data.source === "BA", 
           status: data.status || "Pending Client",
-          regarding: parentReq.description || "No specific context provided in the original requirement.",
-          question: data.question || "Please provide more details.",
+          regarding: parentReq.description || "No context provided.",
+          question: data.question || "Details required.",
           answer: data.answer || "",
           fileName: data.fileName || null, 
           fileData: data.fileData || null  
@@ -385,10 +431,8 @@ class CommunicationModel {
   }
 
   static async getMessages(uid) {
-    // Isolate messages to only those belonging to this client's UID
-    const snapshot = await db.collection('messages')
-      .where('clientId', '==', uid)
-      .get();
+    const safeUid = uid || "INVALID";
+    const snapshot = await db.collection('messages').where('uid', '==', safeUid).get();
       
     let messages = [];
     
@@ -415,19 +459,19 @@ class CommunicationModel {
       });
     });
     
-    // Sort in memory by time
     messages.sort((a, b) => a.rawDate - b.rawDate);
     return messages;
   }
 
   static async sendMessage(data, uid) {
+    const safeUid = uid || data.uid || "GUEST_USER";
     const newMessage = {
       text: data.text || "",
       reqId: data.reqId || "GLOBAL",
-      clientId: uid, // ISOLATION
+      uid: safeUid, 
       fileName: data.fileName || null,
       sender: data.sender || "Client",
-      senderName: data.senderName || "Unknown Client",
+      senderName: data.senderName || "Client",
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     };
 
@@ -438,6 +482,7 @@ class CommunicationModel {
 
 class UserModel {
   static async getSettings(uid) {
+    if (!uid) return null;
     const docRef = db.collection('users').doc(uid);
     const doc = await docRef.get();
 
@@ -457,6 +502,7 @@ class UserModel {
   }
 
   static async updateGeneralSettings(uid, data) {
+    if (!uid) throw new Error("UID missing");
     await db.collection('users').doc(uid).update({
       fullName: data.fullName, 
       email: data.email, 
@@ -466,16 +512,19 @@ class UserModel {
   }
 
   static async updateSecuritySettings(uid, newPassword) {
+    if (!uid) throw new Error("UID missing");
     await admin.auth().updateUser(uid, { password: newPassword });
   }
 
   static async updateNotificationSettings(uid, key, value) {
+    if (!uid) throw new Error("UID missing");
     await db.collection('users').doc(uid).update({
       [`notifications.${key}`]: value
     });
   }
 
   static async getNotifications(uid) {
+    if (!uid) return { notifications: [], unreadCount: 0 };
     const snapshot = await db.collection('notifications')
       .where('uid', '==', uid).orderBy('timestamp', 'desc').limit(10).get();
 
@@ -505,7 +554,7 @@ class UserModel {
       const mockNotif = {
         uid: uid,
         title: "Welcome to NexBA!",
-        message: "Your enterprise client dashboard is ready to use. You can submit new requirements from the Requests page.",
+        message: "Your enterprise client dashboard is ready to use.",
         isRead: false,
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       };
@@ -518,6 +567,7 @@ class UserModel {
   }
 
   static async markNotificationsRead(uid) {
+    if (!uid) return;
     const snapshot = await db.collection('notifications')
       .where('uid', '==', uid).where('isRead', '==', false).get();
 

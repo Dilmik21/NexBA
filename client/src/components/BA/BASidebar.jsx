@@ -18,7 +18,7 @@ export default function BASidebar() {
     { name: "Dashboard", path: "/ba/dashboard", icon: LayoutDashboard },
     { name: "Requirement Inbox", path: "/ba/inbox", icon: Inbox },
     { name: "AI Analysis", path: "/ba/analysis", icon: BrainCircuit },
-    { name: "Task & Assignment", path: "/ba/tasks", icon: Users },
+    { name: "Task Generation", path: "/ba/tasks", icon: Users },
     { name: "Change Management", path: "/ba/changes", icon: RefreshCw },
     { name: "Verification Queue", path: "/ba/verification", icon: CheckSquare },
     { name: "Communication Hub", path: "/ba/communication", icon: MessageSquare },

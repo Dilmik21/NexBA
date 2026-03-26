@@ -1,4 +1,4 @@
-const { BARequirementModel, BATaskModel, BACommunicationModel } = require('../models/BAModels');
+const { BARequirementModel, BATaskModel, BAChangeModel, BACommunicationModel } = require('../models/BAModels');
 const { db } = require('../config/firebase');
 
 const requireBaId = (req, res, next) => {
@@ -291,10 +291,25 @@ const sendToEngineering = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+const getChangeRequests = async (req, res) => {
+  try {
+    const crs = await BAChangeModel.getChangeRequests(req.baId);
+    res.json({ success: true, data: crs });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const updateChangeStatus = async (req, res) => {
+  try {
+    const updatedCR = await BAChangeModel.updateChangeStatus(req.params.crId, req.body.status);
+    res.json({ success: true, data: updatedCR });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
 module.exports = { 
   requireBaId,
   getDashboardOverview, getInboxRequirements, claimRequirement, searchAllItems, getAnalyzedHistory, 
   processRequirementWithAI, regenerateRequirementWithAI, saveEditedAIAnalysis, 
   sendClarificationQuestions, getReqClarifications, answerClarification, 
-  getReadyRequirements, getDevelopers, generateTasksWithAI, saveAssignedTasks, removeTaskFromQueue, sendToEngineering
+  getReadyRequirements, getDevelopers, generateTasksWithAI, saveAssignedTasks, removeTaskFromQueue, sendToEngineering,
+  getChangeRequests, updateChangeStatus
 };

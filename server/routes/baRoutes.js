@@ -18,8 +18,10 @@ const {
   getDevelopers,
   generateTasksWithAI,
   saveAssignedTasks,
-  removeTaskFromQueue, // <-- Added
-  sendToEngineering
+  removeTaskFromQueue, 
+  sendToEngineering,
+  getChangeRequests, // <-- Added
+  updateChangeStatus // <-- Added
 } = require('../controllers/baController');
 
 router.get('/overview', requireBaId, getDashboardOverview);
@@ -39,10 +41,11 @@ router.get('/tasks/ready-requirements', requireBaId, getReadyRequirements);
 router.get('/tasks/developers', requireBaId, getDevelopers); 
 router.post('/tasks/generate/:reqId', requireBaId, generateTasksWithAI); 
 router.post('/tasks/assign', requireBaId, saveAssignedTasks); 
-
-// --- ADDED: Delete task endpoint ---
 router.delete('/tasks/:taskId', requireBaId, removeTaskFromQueue);
-
 router.post('/tasks/forward', requireBaId, sendToEngineering); 
+
+// --- NEW ROUTES: Change Management ---
+router.get('/changes', requireBaId, getChangeRequests);
+router.put('/changes/:crId/status', requireBaId, updateChangeStatus);
 
 module.exports = router;

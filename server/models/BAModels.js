@@ -312,7 +312,6 @@ class BATaskModel {
   static async getTeamLeaders() {
     const devsSnapshot = await db.collection('users').where('role', '==', 'Developer').get();
     
-    // Count REQUIREMENTS assigned to each leader
     const activeReqsSnap = await db.collection('requirements')
       .where('status', 'in', ['Sent to Engineering', 'In Progress', 'Awaiting Verification', 'Pending Verification', 'Modification Requested'])
       .get()
@@ -366,7 +365,6 @@ class BATaskModel {
     return leaders;
   }
 
-  // --- BULLETPROOF ID RECYCLING: Guaranteed to reuse 1, 2, 3 for new AI tasks ---
   static async clearAndSaveAITasks(reqId, generatedTasks, projectType) {
     const allTasksSnap = await db.collection('tasks').where('reqId', '==', reqId).get();
     
@@ -379,12 +377,10 @@ class BATaskModel {
       const t = doc.data();
       const suffix = parseInt(t.taskId.split('-').pop(), 10);
 
-      // We ONLY delete Unassigned tasks. 
       if (t.status === 'Unassigned') {
         deleteBatch.delete(doc.ref);
         deletedCount++;
       } else {
-        // If a task is assigned/locked, its number is strictly taken
         if (!isNaN(suffix)) lockedSuffixes.add(suffix);
       }
     });
@@ -400,14 +396,12 @@ class BATaskModel {
     let currentTry = 1;
 
     generatedTasks.forEach((task) => {
-      // Loop upwards from 1 until we find an ID that is NOT in lockedSuffixes
-      // This means if 1, 2, and 3 were just deleted, they are instantly reused here!
       while (lockedSuffixes.has(currentTry)) {
         currentTry++;
       }
       
       const taskId = `TASK-${reqNum}-${currentTry}`;
-      lockedSuffixes.add(currentTry); // Mark it as taken for the next loop
+      lockedSuffixes.add(currentTry); 
       
       const newRef = db.collection('tasks').doc();
       const taskObj = {
@@ -552,6 +546,89 @@ class BATaskModel {
   }
 }
 
+class BAChangeModel {
+  static async getChangeRequests(baId) {
+    const crSnapshot = await db.collection('changeRequests').get();
+    let crs = [];
+    
+    crSnapshot.forEach(doc => {
+      const data = doc.data();
+      if (!baId || data.baId === baId || !data.baId) {
+        
+        // Ensure the UI never breaks even if the real data has no AI Impact
+        const safeAiImpact = data.aiImpact || {
+           riskScore: 0,
+           riskLevel: "Pending Analysis",
+           analysisText: "System generated fallback: Awaiting AI impact assessment. Please review manually.",
+           conflicts: []
+        };
+
+        crs.push({ 
+          id: doc.id, 
+          ...data,
+          aiImpact: safeAiImpact
+        });
+      }
+    });
+
+    crs.sort((a, b) => {
+      if (a.status === 'Pending' && b.status !== 'Pending') return -1;
+      if (a.status !== 'Pending' && b.status === 'Pending') return 1;
+      return (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0);
+    });
+
+    return crs;
+  }
+
+  static async updateChangeStatus(crId, newStatus) {
+    const crRef = db.collection('changeRequests').doc(crId);
+    const crSnap = await crRef.get();
+    
+    if (!crSnap.exists) throw new Error("Change Request not found");
+    const data = crSnap.data();
+
+    const batch = db.batch();
+    batch.update(crRef, { status: newStatus, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+    if (newStatus === "Approved") {
+      const msgRef = db.collection('messages').doc();
+      batch.set(msgRef, {
+        reqId: data.reqId,
+        senderRole: "BA",
+        senderName: "System Alert",
+        text: `CHANGE APPROVED: A Scope Change (${data.crId || 'CR'}) has been approved for requirement ${data.reqId}. Proposed change: "${data.proposedText || data.clientDescription}"`,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        type: "System Alert",
+        teamLeaderId: data.teamLeaderId || null 
+      });
+
+      const reqSnap = await db.collection('requirements').where('reqId', '==', data.reqId).get();
+      if (!reqSnap.empty) {
+        batch.update(reqSnap.docs[0].ref, {
+           status: "Modification Requested",
+           lastChangeType: data.type || "Scope Change",
+           changeRequestedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+
+    } else if (newStatus === "Rejected") {
+      const notificationRef = db.collection('notifications').doc();
+      batch.set(notificationRef, {
+        uid: data.clientId || data.submittedBy || "CLIENT_ID_MISSING", 
+        reqId: data.reqId,
+        title: "Change Request Rejected",
+        message: `Your recent change request for ${data.reqId} was reviewed and rejected by the Business Analyst. Please check the communication hub for details.`,
+        type: "rejection",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        read: false
+      });
+    }
+
+    await batch.commit();
+    return { id: crId, ...data, status: newStatus };
+  }
+}
+
 class BACommunicationModel {
   static async sendClarificationQuestions(reqId, questions, baId, baName) {
     const batch = db.batch();
@@ -612,4 +689,4 @@ class BACommunicationModel {
   }
 }
 
-module.exports = { BARequirementModel, BATaskModel, BACommunicationModel };
+module.exports = { BARequirementModel, BATaskModel, BAChangeModel, BACommunicationModel };

@@ -22,7 +22,8 @@ import ClientSettings from "./pages/Client/ClientSettings";
 import BAOverview from "./pages/BA/BAOverview";
 import RequirementInbox from "./pages/BA/RequirementInbox";
 import AIAnalysis from "./pages/BA/AIAnalysis";
-import TaskAssignment from "./pages/BA/TaskAssignment"; // <-- NEW IMPORT
+import TaskAssignment from "./pages/BA/TaskAssignment";
+import ChangeManagement from "./pages/BA/ChangeManagement"; // <-- NEW IMPORT
 
 function App() {
   return (
@@ -137,12 +138,21 @@ function App() {
             } 
           />
 
-          {/* NEW: Task & Assignment Route */}
           <Route 
             path="/ba/tasks" 
             element={
               <ProtectedRoute>
                 <TaskAssignment />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: Change Management Route */}
+          <Route 
+            path="/ba/changes" 
+            element={
+              <ProtectedRoute>
+                <ChangeManagement />
               </ProtectedRoute>
             } 
           />

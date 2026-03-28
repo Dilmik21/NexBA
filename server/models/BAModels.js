@@ -555,7 +555,6 @@ class BAChangeModel {
       const data = doc.data();
       if (!baId || data.baId === baId || !data.baId) {
         
-        // Ensure the UI never breaks even if the real data has no AI Impact
         const safeAiImpact = data.aiImpact || {
            riskScore: 0,
            riskLevel: "Pending Analysis",
@@ -629,6 +628,103 @@ class BAChangeModel {
   }
 }
 
+class BAVerificationModel {
+  static async getPendingVerifications(baId) {
+    const reqsSnap = await db.collection('requirements').where('baId', '==', baId).get();
+    const validReqIds = [];
+    const reqMap = {};
+    
+    reqsSnap.forEach(doc => {
+      validReqIds.push(doc.data().reqId);
+      reqMap[doc.data().reqId] = doc.data().description || doc.data().text || "No original specification found.";
+    });
+
+    if (validReqIds.length === 0) return [];
+
+    const tasksSnap = await db.collection('tasks').where('status', '==', 'Pending Verification').get();
+    let verifications = [];
+    
+    tasksSnap.forEach(doc => {
+      const task = doc.data();
+      if (validReqIds.includes(task.reqId)) {
+        verifications.push({
+          id: doc.id,
+          taskId: task.taskId,
+          reqId: task.reqId,
+          title: task.title,
+          assigneeName: task.assigneeName || task.teamLeaderName || "Developer",
+          submittedAt: task.verificationSubmittedAt || task.updatedAt || task.createdAt,
+          dateStr: formatShortDate(task.verificationSubmittedAt || task.updatedAt),
+          specification: reqMap[task.reqId],
+          evidence: task.evidence || { images: [], video: null, githubLink: null, notes: "" }
+        });
+      }
+    });
+
+    verifications.sort((a, b) => (b.submittedAt?.toMillis?.() || 0) - (a.submittedAt?.toMillis?.() || 0));
+    return verifications;
+  }
+
+  static async approveTask(taskId) {
+    const taskQuery = await db.collection('tasks').where('taskId', '==', taskId).get();
+    if (taskQuery.empty) throw new Error("Task not found");
+    const taskDoc = taskQuery.docs[0];
+    const taskData = taskDoc.data();
+
+    const batch = db.batch();
+    
+    batch.update(taskDoc.ref, { 
+      status: "Client UAT", 
+      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+    });
+
+    const reqQuery = await db.collection('requirements').where('reqId', '==', taskData.reqId).get();
+    if (!reqQuery.empty) {
+       const reqData = reqQuery.docs[0].data();
+       const notifRef = db.collection('notifications').doc();
+       batch.set(notifRef, {
+         uid: reqData.clientId || reqData.submittedBy || "CLIENT_ID_MISSING",
+         title: "Task Ready for UAT",
+         message: `Task ${taskId} for requirement ${taskData.reqId} has been verified by the BA and is ready for your User Acceptance Testing.`,
+         type: "uat_ready",
+         createdAt: admin.firestore.FieldValue.serverTimestamp(),
+         read: false
+       });
+    }
+
+    await batch.commit();
+    return { success: true };
+  }
+
+  static async rejectTask(taskId, reason) {
+    const taskQuery = await db.collection('tasks').where('taskId', '==', taskId).get();
+    if (taskQuery.empty) throw new Error("Task not found");
+    const taskDoc = taskQuery.docs[0];
+    const taskData = taskDoc.data();
+
+    const batch = db.batch();
+    
+    batch.update(taskDoc.ref, { 
+      status: "In Progress", 
+      rejectionReason: reason,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+    });
+
+    const notifRef = db.collection('notifications').doc();
+    batch.set(notifRef, {
+      uid: taskData.assigneeId || taskData.teamLeaderId || "DEV_ID_MISSING",
+      title: "Verification Rejected",
+      message: `Your evidence for ${taskId} was rejected by the BA. Reason: ${reason}`,
+      type: "rejection",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      read: false
+    });
+
+    await batch.commit();
+    return { success: true };
+  }
+}
+
 class BACommunicationModel {
   static async sendClarificationQuestions(reqId, questions, baId, baName) {
     const batch = db.batch();
@@ -689,4 +785,4 @@ class BACommunicationModel {
   }
 }
 
-module.exports = { BARequirementModel, BATaskModel, BAChangeModel, BACommunicationModel };
+module.exports = { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BACommunicationModel };

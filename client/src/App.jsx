@@ -23,7 +23,8 @@ import BAOverview from "./pages/BA/BAOverview";
 import RequirementInbox from "./pages/BA/RequirementInbox";
 import AIAnalysis from "./pages/BA/AIAnalysis";
 import TaskAssignment from "./pages/BA/TaskAssignment";
-import ChangeManagement from "./pages/BA/ChangeManagement"; // <-- NEW IMPORT
+import ChangeManagement from "./pages/BA/ChangeManagement"; 
+import VerificationQueue from "./pages/BA/VerificationQueue"; // <-- NEW IMPORT
 
 function App() {
   return (
@@ -147,12 +148,21 @@ function App() {
             } 
           />
 
-          {/* NEW: Change Management Route */}
           <Route 
             path="/ba/changes" 
             element={
               <ProtectedRoute>
                 <ChangeManagement />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: Verification Queue Route */}
+          <Route 
+            path="/ba/verification" 
+            element={
+              <ProtectedRoute>
+                <VerificationQueue />
               </ProtectedRoute>
             } 
           />

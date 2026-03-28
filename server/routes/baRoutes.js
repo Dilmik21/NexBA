@@ -20,8 +20,11 @@ const {
   saveAssignedTasks,
   removeTaskFromQueue, 
   sendToEngineering,
-  getChangeRequests, // <-- Added
-  updateChangeStatus // <-- Added
+  getChangeRequests, 
+  updateChangeStatus,
+  getVerificationTasks, // <-- Added Verification functions
+  approveTaskVerification, // <-- Added
+  rejectTaskVerification // <-- Added
 } = require('../controllers/baController');
 
 router.get('/overview', requireBaId, getDashboardOverview);
@@ -44,8 +47,13 @@ router.post('/tasks/assign', requireBaId, saveAssignedTasks);
 router.delete('/tasks/:taskId', requireBaId, removeTaskFromQueue);
 router.post('/tasks/forward', requireBaId, sendToEngineering); 
 
-// --- NEW ROUTES: Change Management ---
+// --- ROUTES: Change Management ---
 router.get('/changes', requireBaId, getChangeRequests);
 router.put('/changes/:crId/status', requireBaId, updateChangeStatus);
+
+// --- NEW ROUTES: Verification Queue ---
+router.get('/verification', requireBaId, getVerificationTasks);
+router.post('/verification/:taskId/approve', requireBaId, approveTaskVerification);
+router.post('/verification/:taskId/reject', requireBaId, rejectTaskVerification);
 
 module.exports = router;

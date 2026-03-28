@@ -1,4 +1,4 @@
-const { BARequirementModel, BATaskModel, BAChangeModel, BACommunicationModel } = require('../models/BAModels');
+const { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BACommunicationModel } = require('../models/BAModels');
 const { db } = require('../config/firebase');
 
 const requireBaId = (req, res, next) => {
@@ -305,11 +305,34 @@ const updateChangeStatus = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+// --- NEW VERIFICATION ENDPOINTS ---
+const getVerificationTasks = async (req, res) => {
+  try {
+    const verifications = await BAVerificationModel.getPendingVerifications(req.baId);
+    res.json({ success: true, data: verifications });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const approveTaskVerification = async (req, res) => {
+  try {
+    await BAVerificationModel.approveTask(req.params.taskId);
+    res.json({ success: true, message: "Task approved and sent to client UAT" });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const rejectTaskVerification = async (req, res) => {
+  try {
+    await BAVerificationModel.rejectTask(req.params.taskId, req.body.reason);
+    res.json({ success: true, message: "Task rejected and returned to developer" });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
 module.exports = { 
   requireBaId,
   getDashboardOverview, getInboxRequirements, claimRequirement, searchAllItems, getAnalyzedHistory, 
   processRequirementWithAI, regenerateRequirementWithAI, saveEditedAIAnalysis, 
   sendClarificationQuestions, getReqClarifications, answerClarification, 
   getReadyRequirements, getDevelopers, generateTasksWithAI, saveAssignedTasks, removeTaskFromQueue, sendToEngineering,
-  getChangeRequests, updateChangeStatus
+  getChangeRequests, updateChangeStatus,
+  getVerificationTasks, approveTaskVerification, rejectTaskVerification // Exporting the new verification models
 };

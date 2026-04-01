@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { Sparkles, ChevronDown, CheckCircle2, Users, Loader2, FileText, Send, Plus, Lock, Trash2, AlertCircle } from "lucide-react";
+import { Sparkles, ChevronDown, CheckCircle2, Users, Loader2, FileText, Send, Plus, Lock, Trash2, AlertCircle, ShieldCheck } from "lucide-react";
 
 export default function TaskAssignment() {
   const navigate = useNavigate();
@@ -21,6 +21,7 @@ export default function TaskAssignment() {
   const [viewMode, setViewMode] = useState('empty');
   
   const [generatedTasks, setGeneratedTasks] = useState([]);
+  const [isFetchingTasks, setIsFetchingTasks] = useState(false);
   const [isForwarding, setIsForwarding] = useState(false);
   const [isSavingManual, setIsSavingManual] = useState(false);
   const [isDeleting, setIsDeleting] = useState(null);
@@ -45,7 +46,7 @@ export default function TaskAssignment() {
           const updatedReq = reqsJson.data.find(r => r.id === selectedReq.id);
           if (updatedReq) {
             setSelectedReq(updatedReq);
-            if (updatedReq.tasks) setGeneratedTasks(updatedReq.tasks);
+            // Don't set tasks here, let the selection handler do it
           }
         }
       }
@@ -62,16 +63,42 @@ export default function TaskAssignment() {
     } catch (error) { console.error("Error fetching leaders:", error); }
   };
 
-  const handleSelectRequirement = (req) => {
+  // --- NEW: Fetch tasks directly when a requirement is selected ---
+  const fetchTasksForRequirement = async (reqId) => {
+    setIsFetchingTasks(true);
+    try {
+      // Note: You need a backend route to fetch tasks by reqId if you don't have one.
+      // Assuming you might not, we will rely on the initial fetch if available, 
+      // but ensure the view mode is set correctly even if tasks are empty.
+      
+      // Temporary fallback: If tasks are attached, use them.
+      const targetReq = requirements.find(r => r.id === reqId);
+      const tasksToSet = targetReq?.tasks || [];
+      
+      setGeneratedTasks(tasksToSet);
+      return tasksToSet;
+
+    } catch (error) {
+      console.error("Error fetching specific tasks:", error);
+      return [];
+    } finally {
+      setIsFetchingTasks(false);
+    }
+  };
+
+  const handleSelectRequirement = async (req) => {
     setSelectedReq(req);
     setIsDropdownOpen(false);
     setSelectedLeader(null);
 
-    if (req.tasks && req.tasks.length > 0) {
-      setGeneratedTasks(req.tasks);
+    const assignedStatuses = ['Sent to Engineering', 'In Progress', 'Pending Verification', 'Modification Requested', 'Client UAT', 'Completed', 'Done'];
+    const isAlreadyAssigned = assignedStatuses.includes(req.status);
+
+    const fetchedTasks = await fetchTasksForRequirement(req.id);
+
+    if (fetchedTasks.length > 0 || isAlreadyAssigned) {
       setViewMode('ai');
     } else {
-      setGeneratedTasks([]);
       setViewMode('empty');
     }
   };
@@ -119,6 +146,8 @@ export default function TaskAssignment() {
 
       setManualForm({ title: '', priority: 'Medium', requiredRole: 'Full-stack Developer' });
       await fetchInitialData();
+      // Re-fetch tasks after manual addition
+      if (selectedReq) await fetchTasksForRequirement(selectedReq.id);
       setViewMode('ai'); 
     } catch (error) { console.error("Assignment failed:", error); } 
     finally { setIsSavingManual(false); }
@@ -184,7 +213,6 @@ export default function TaskAssignment() {
     'AI/ML Developer'
   ];
 
-  // --- UI GAP-FILLING: Accurately predicts the next available slot for Manual Tasks ---
   const reqNum = selectedReq ? (selectedReq.id.includes('-') ? selectedReq.id.split('-')[1] : selectedReq.id) : 'XXX';
   const usedSuffixes = new Set();
   generatedTasks.forEach(t => {
@@ -199,8 +227,9 @@ export default function TaskAssignment() {
   }
   const manualPreviewId = `TASK-${reqNum}-${nextAvailable}`;
   
+  const assignedStatuses = ['Sent to Engineering', 'In Progress', 'Pending Verification', 'Modification Requested', 'Client UAT', 'Completed', 'Done'];
+  const isAssigned = selectedReq ? assignedStatuses.includes(selectedReq.status) : false;
   const pendingTaskCount = generatedTasks.filter(t => t.status === 'Unassigned').length;
-  const isFullySent = selectedReq?.status === 'Sent to Engineering' && pendingTaskCount === 0;
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
@@ -258,7 +287,7 @@ export default function TaskAssignment() {
 
           <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-0">
             
-            {viewMode === 'empty' && (
+            {viewMode === 'empty' && !isAssigned && (
               <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-8">
                 <div className="w-16 h-16 md:w-20 md:h-20 bg-blue-50 rounded-full flex items-center justify-center text-primary mb-4 md:mb-6">
                   <Users className="w-8 h-8 md:w-10 md:h-10" />
@@ -302,25 +331,32 @@ export default function TaskAssignment() {
                     <>
                       <div className="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-white flex-shrink-0">
                         <div className="flex items-center text-navy font-bold text-sm md:text-base">
-                          <FileText className="w-4 h-4 md:w-5 md:h-5 mr-2 text-primary" /> Task Queue
+                          <FileText className="w-4 h-4 md:w-5 md:h-5 mr-2 text-primary" /> Task Queue {isAssigned && "(Locked)"}
                         </div>
-                        <div className="flex items-center space-x-3 md:space-x-4">
-                           <button 
-                             onClick={() => setViewMode('manual')} 
-                             className="text-[11px] md:text-[13px] flex items-center text-gray-500 font-bold hover:text-primary transition-colors"
-                           >
-                             <Plus className="w-3 h-3 md:w-4 md:h-4 mr-1" /> Add Manual
-                           </button>
-                           {generatedTasks.length > 0 && !isFullySent && (
-                             <button onClick={handleAIBreakdown} className="text-[11px] md:text-[13px] text-primary font-bold hover:underline flex items-center">
-                               <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1" /> Regenerate Queue
+                        
+                        {!isAssigned && (
+                          <div className="flex items-center space-x-3 md:space-x-4">
+                             <button 
+                               onClick={() => setViewMode('manual')} 
+                               className="text-[11px] md:text-[13px] flex items-center text-gray-500 font-bold hover:text-primary transition-colors"
+                             >
+                               <Plus className="w-3 h-3 md:w-4 md:h-4 mr-1" /> Add Manual
                              </button>
-                           )}
-                        </div>
+                             {generatedTasks.length > 0 && (
+                               <button onClick={handleAIBreakdown} className="text-[11px] md:text-[13px] text-primary font-bold hover:underline flex items-center">
+                                 <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1" /> Regenerate Queue
+                               </button>
+                             )}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4">
-                        {generatedTasks.length === 0 ? (
+                        {isFetchingTasks ? (
+                           <div className="flex justify-center py-10">
+                              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                           </div>
+                        ) : generatedTasks.length === 0 ? (
                           <div className="text-center py-10 md:py-20">
                              <CheckCircle2 className="w-12 h-12 md:w-16 md:h-16 text-green-400 mx-auto mb-4 opacity-50" />
                              <h3 className="font-bold text-navy text-lg md:text-xl">Queue Empty!</h3>
@@ -335,7 +371,7 @@ export default function TaskAssignment() {
                                 key={index} 
                                 className="bg-white p-4 md:p-5 rounded-2xl border border-gray-200 shadow-sm transition-all flex flex-col justify-center relative group"
                               >
-                                {!isAssignedToTeam && (
+                                {!isAssigned && !isAssignedToTeam && (
                                   <button 
                                     onClick={() => handleDeleteTask(task.taskId)}
                                     disabled={isDeleting === task.taskId}
@@ -361,7 +397,11 @@ export default function TaskAssignment() {
                                   </div>
                                   
                                   <div className="flex items-center flex-shrink-0 self-start sm:self-auto mt-2 sm:mt-0">
-                                    {isAssignedToTeam ? (
+                                    {isAssigned ? (
+                                      <div className="flex items-center text-[11px] md:text-[12px] font-bold text-green-600 bg-green-50 border border-green-100 px-3 py-1.5 rounded-xl">
+                                        <Lock className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1.5 text-green-500" /> Assigned
+                                      </div>
+                                    ) : isAssignedToTeam ? (
                                       <div className="flex items-center text-[11px] md:text-[12px] font-bold text-gray-500 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl">
                                         <Lock className="w-3 h-3 md:w-3.5 md:h-3.5 mr-1.5 text-gray-400" /> Locked to Team
                                       </div>
@@ -380,7 +420,7 @@ export default function TaskAssignment() {
                     </>
                   )}
 
-                  {viewMode === 'manual' && (
+                  {viewMode === 'manual' && !isAssigned && (
                     <>
                       <div className="p-4 md:p-6 border-b border-gray-200 bg-white font-bold text-navy flex-shrink-0 flex justify-between items-center text-sm md:text-base">
                         <span>Add Task to Queue</span>
@@ -479,104 +519,120 @@ export default function TaskAssignment() {
                 </div>
 
                 <div className="w-full lg:w-2/5 flex flex-col h-[400px] lg:h-full bg-white relative">
-                  <div className="p-4 md:p-6 border-b border-gray-50 flex justify-between items-center text-sm font-bold text-gray-500 flex-shrink-0">
-                    <span className="flex items-center"><Users className="w-4 h-4 mr-2" /> Development Teams</span>
-                    {!isFullySent && pendingTaskCount > 0 && <span className="text-[11px] md:text-xs font-normal text-gray-400">Select Leader to Forward</span>}
-                  </div>
                   
-                  <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4 pb-24">
-                    
-                    {!isFullySent && selectedReq && selectedReq.projectType && pendingTaskCount > 0 && (
-                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 md:p-4 mb-4 flex items-start">
-                         <Sparkles className="w-4 h-4 text-indigo-500 mt-0.5 mr-2 flex-shrink-0" />
-                         <div>
-                            <p className="text-[11px] md:text-xs font-bold text-indigo-800">AI Recommendation</p>
-                            <p className="text-[10px] md:text-[11px] text-indigo-600 mt-0.5">This requirement is best suited for a team specializing in <strong>{selectedReq.projectType}</strong>.</p>
-                         </div>
-                      </div>
-                    )}
-
-                    {isFullySent && (
-                      <div className="text-center py-10">
-                        <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <CheckCircle2 className="w-8 h-8 text-green-500" />
+                  {isAssigned ? (
+                    <div className="p-6">
+                      <div className="bg-white rounded-2xl border border-green-200 shadow-sm overflow-hidden ring-1 ring-green-50">
+                        <div className="px-6 py-5 border-b border-green-100 bg-green-50/80 flex items-center gap-3">
+                          <ShieldCheck className="w-6 h-6 text-green-600" />
+                          <h3 className="font-bold text-green-800 text-[16px]">Requirement Forwarded</h3>
                         </div>
-                        <h3 className="font-bold text-navy text-lg">Requirement Forwarded</h3>
-                        <p className="text-gray-500 text-[13px] mt-2 px-4 leading-relaxed">
-                          This requirement and its tasks have been securely transferred to the Engineering Team Leader for distribution.
-                        </p>
-                      </div>
-                    )}
-
-                    {!isFullySent && leaders.map((leader) => {
-                      const isOverloaded = leader.currentLoad >= leader.maxLoad;
-                      const percent = Math.min((leader.currentLoad / leader.maxLoad) * 100, 100);
-                      
-                      let barColor = 'bg-green-500';
-                      if (isOverloaded) barColor = 'bg-red-500';
-                      else if (percent >= 80) barColor = 'bg-orange-500';
-                      else if (percent >= 50) barColor = 'bg-yellow-400';
-
-                      const isRecommended = selectedReq && selectedReq.projectType === leader.specialty && !isOverloaded;
-
-                      return (
-                        <div 
-                          key={leader.id} 
-                          onClick={() => { if (!isOverloaded) setSelectedLeader(leader) }}
-                          className={`p-4 md:p-5 rounded-2xl transition-all border ${
-                            isOverloaded
-                              ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
-                              : selectedLeader?.id === leader.id 
-                                ? 'border-primary ring-2 ring-primary/10 shadow-sm bg-blue-50/20 cursor-pointer' 
-                                : isRecommended 
-                                    ? 'border-green-300 shadow-[0_4px_14px_rgba(16,185,129,0.1)] bg-white cursor-pointer hover:border-green-400' 
-                                    : 'border-gray-100 hover:shadow-md hover:border-blue-200 bg-white cursor-pointer'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-3 md:mb-4">
-                            <div className="flex items-center space-x-3 min-w-0">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0 ${isOverloaded ? 'bg-gray-400' : 'bg-[#0B1A28]'}`}>
-                                {leader.initials}
-                              </div>
-                              <div className="min-w-0">
-                                <h4 className="font-bold text-navy text-[14px] md:text-[15px] truncate">{leader.teamName}</h4>
-                                <p className="text-[11px] text-gray-400 mt-0.5 truncate">Specialty: <span className="font-medium text-gray-600">{leader.specialty}</span></p>
-                              </div>
+                        <div className="p-6">
+                          <p className="text-sm text-gray-600 mb-5 leading-relaxed">
+                            This requirement has been locked. The task backlog is currently being managed and worked on by:
+                          </p>
+                          <div className="border border-gray-100 rounded-xl p-5 bg-gray-50/50 flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-[#0B1A28] text-white flex items-center justify-center font-bold text-sm flex-shrink-0 shadow-sm">
+                              {selectedReq.teamLeaderName ? selectedReq.teamLeaderName.substring(0,2).toUpperCase() : "TM"}
                             </div>
-                            <div className="flex flex-col items-end gap-1 flex-shrink-0 pl-2">
-                               {isRecommended && <span className="bg-green-50 text-green-600 text-[9px] md:text-[10px] font-bold px-2 py-1 rounded">Best Match</span>}
-                               {isOverloaded && <span className="flex items-center bg-red-50 text-red-600 text-[9px] md:text-[10px] font-bold px-2 py-1 rounded"><AlertCircle className="w-3 h-3 mr-1"/> Max Load</span>}
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <div className="flex justify-between text-[10px] md:text-[11px] font-bold text-gray-400 mb-1.5">
-                              <span>Active Requirements</span>
-                              <span className={isOverloaded ? 'text-red-500' : ''}>{leader.currentLoad}/{leader.maxLoad}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5">
-                              <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${percent}%` }}></div>
+                            <div>
+                              <h4 className="font-bold text-navy text-[16px]">{selectedReq.teamLeaderName || "Engineering Team"}</h4>
+                              <p className="text-xs font-bold text-green-600 mt-1 uppercase tracking-wide">Active Assignment</p>
                             </div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {!isFullySent && pendingTaskCount > 0 && selectedLeader && (
-                    <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-white border-t border-gray-100 shadow-[0_-10px_20px_rgba(0,0,0,0.03)] z-10">
-                      <button 
-                        onClick={handleForwardToEngineering}
-                        disabled={isForwarding}
-                        className="w-full bg-primary hover:bg-blue-600 text-white font-bold px-6 py-4 rounded-xl transition-all shadow-md flex justify-center items-center text-[13px] md:text-[14px]"
-                      >
-                        {isForwarding ? (
-                          <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Forwarding Queue...</>
-                        ) : (
-                          <><Send className="w-4 h-4 mr-2" /> Forward {pendingTaskCount} Task{pendingTaskCount > 1 ? 's' : ''} to {selectedLeader.teamName}</>
-                        )}
-                      </button>
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <div className="p-4 md:p-6 border-b border-gray-50 flex justify-between items-center text-sm font-bold text-gray-500 flex-shrink-0">
+                        <span className="flex items-center"><Users className="w-4 h-4 mr-2" /> Development Teams</span>
+                        {pendingTaskCount > 0 && <span className="text-[11px] md:text-xs font-normal text-gray-400">Select Leader to Forward</span>}
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4 pb-24">
+                        
+                        {selectedReq && selectedReq.projectType && pendingTaskCount > 0 && (
+                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 md:p-4 mb-4 flex items-start">
+                             <Sparkles className="w-4 h-4 text-indigo-500 mt-0.5 mr-2 flex-shrink-0" />
+                             <div>
+                                <p className="text-[11px] md:text-xs font-bold text-indigo-800">AI Recommendation</p>
+                                <p className="text-[10px] md:text-[11px] text-indigo-600 mt-0.5">This requirement is best suited for a team specializing in <strong>{selectedReq.projectType}</strong>.</p>
+                             </div>
+                          </div>
+                        )}
+
+                        {leaders.map((leader) => {
+                          const isOverloaded = leader.currentLoad >= leader.maxLoad;
+                          const percent = Math.min((leader.currentLoad / leader.maxLoad) * 100, 100);
+                          
+                          let barColor = 'bg-green-500';
+                          if (isOverloaded) barColor = 'bg-red-500';
+                          else if (percent >= 80) barColor = 'bg-orange-500';
+                          else if (percent >= 50) barColor = 'bg-yellow-400';
+
+                          const isRecommended = selectedReq && selectedReq.projectType === leader.specialty && !isOverloaded;
+
+                          return (
+                            <div 
+                              key={leader.id} 
+                              onClick={() => { if (!isOverloaded) setSelectedLeader(leader) }}
+                              className={`p-4 md:p-5 rounded-2xl transition-all border ${
+                                isOverloaded
+                                  ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                                  : selectedLeader?.id === leader.id 
+                                    ? 'border-primary ring-2 ring-primary/10 shadow-sm bg-blue-50/20 cursor-pointer' 
+                                    : isRecommended 
+                                      ? 'border-green-300 shadow-[0_4px_14px_rgba(16,185,129,0.1)] bg-white cursor-pointer hover:border-green-400' 
+                                      : 'border-gray-100 hover:shadow-md hover:border-blue-200 bg-white cursor-pointer'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-3 md:mb-4">
+                                <div className="flex items-center space-x-3 min-w-0">
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0 ${isOverloaded ? 'bg-gray-400' : 'bg-[#0B1A28]'}`}>
+                                    {leader.initials}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="font-bold text-navy text-[14px] md:text-[15px] truncate">{leader.teamName}</h4>
+                                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">Specialty: <span className="font-medium text-gray-600">{leader.specialty}</span></p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1 flex-shrink-0 pl-2">
+                                   {isRecommended && <span className="bg-green-50 text-green-600 text-[9px] md:text-[10px] font-bold px-2 py-1 rounded">Best Match</span>}
+                                   {isOverloaded && <span className="flex items-center bg-red-50 text-red-600 text-[9px] md:text-[10px] font-bold px-2 py-1 rounded"><AlertCircle className="w-3 h-3 mr-1"/> Max Load</span>}
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <div className="flex justify-between text-[10px] md:text-[11px] font-bold text-gray-400 mb-1.5">
+                                  <span>Active Requirements</span>
+                                  <span className={isOverloaded ? 'text-red-500' : ''}>{leader.currentLoad}/{leader.maxLoad}</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${percent}%` }}></div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {pendingTaskCount > 0 && selectedLeader && (
+                        <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-white border-t border-gray-100 shadow-[0_-10px_20px_rgba(0,0,0,0.03)] z-10">
+                          <button 
+                            onClick={handleForwardToEngineering}
+                            disabled={isForwarding}
+                            className="w-full bg-primary hover:bg-blue-600 text-white font-bold px-6 py-4 rounded-xl transition-all shadow-md flex justify-center items-center text-[13px] md:text-[14px]"
+                          >
+                            {isForwarding ? (
+                              <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Forwarding Queue...</>
+                            ) : (
+                              <><Send className="w-4 h-4 mr-2" /> Forward {pendingTaskCount} Task{pendingTaskCount > 1 ? 's' : ''} to {selectedLeader.teamName}</>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
 
                 </div>

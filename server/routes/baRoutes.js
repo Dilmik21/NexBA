@@ -22,9 +22,18 @@ const {
   sendToEngineering,
   getChangeRequests, 
   updateChangeStatus,
-  getVerificationTasks, // <-- Added Verification functions
-  approveTaskVerification, // <-- Added
-  rejectTaskVerification // <-- Added
+  getVerificationTasks, 
+  approveTaskVerification, 
+  rejectTaskVerification,
+  getChatRequirements, 
+  getChatMessages,     
+  sendChatMessage,     
+  markMessagesRead,
+  getProgressAndReports,
+  getSettings,                // <-- NEW
+  updateGeneralSettings,      // <-- NEW
+  updateSecuritySettings,     // <-- NEW
+  updateNotificationSettings  // <-- NEW
 } = require('../controllers/baController');
 
 router.get('/overview', requireBaId, getDashboardOverview);
@@ -47,13 +56,24 @@ router.post('/tasks/assign', requireBaId, saveAssignedTasks);
 router.delete('/tasks/:taskId', requireBaId, removeTaskFromQueue);
 router.post('/tasks/forward', requireBaId, sendToEngineering); 
 
-// --- ROUTES: Change Management ---
 router.get('/changes', requireBaId, getChangeRequests);
 router.put('/changes/:crId/status', requireBaId, updateChangeStatus);
 
-// --- NEW ROUTES: Verification Queue ---
 router.get('/verification', requireBaId, getVerificationTasks);
 router.post('/verification/:taskId/approve', requireBaId, approveTaskVerification);
 router.post('/verification/:taskId/reject', requireBaId, rejectTaskVerification);
+
+router.get('/chat/list', requireBaId, getChatRequirements);
+router.get('/chat/:reqId/:channel', requireBaId, getChatMessages);
+router.post('/chat/:reqId/:channel', requireBaId, sendChatMessage);
+router.put('/chat/:reqId/:channel/read', requireBaId, markMessagesRead);
+
+router.get('/progress', requireBaId, getProgressAndReports);
+
+// --- NEW ROUTES: Settings ---
+router.get('/settings', requireBaId, getSettings);
+router.put('/settings/general', requireBaId, updateGeneralSettings);
+router.put('/settings/security', requireBaId, updateSecuritySettings);
+router.put('/settings/notifications', requireBaId, updateNotificationSettings);
 
 module.exports = router;

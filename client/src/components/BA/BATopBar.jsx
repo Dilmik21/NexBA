@@ -9,27 +9,23 @@ export default function BATopBar() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Mobile Menu State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Dropdown States
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   
-  // Notification States
   const [notifications, setNotifications] = useState([]);
   const [hasNewNotifications, setHasNewNotifications] = useState(false); 
   
-  // Refs to handle clicking outside to close boxes
+  const [profileImage, setProfileImage] = useState(null);
+  const [fullName, setFullName] = useState("Business Analyst");
+  
   const profileRef = useRef(null);
   const notifRef = useRef(null);
   
-  // Search States
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
 
-  // Navigation links for the mobile drawer
   const navLinks = [
     { name: "Dashboard", path: "/ba/dashboard", icon: LayoutGrid },
     { name: "Requirement Inbox", path: "/ba/inbox", icon: Inbox },
@@ -41,7 +37,37 @@ export default function BATopBar() {
     { name: "Progress & Reports", path: "/ba/reports", icon: BarChart2 },
   ];
 
-  // --- FETCH NOTIFICATIONS ---
+  // --- BULLETPROOF FETCH AND LISTENER ---
+  useEffect(() => {
+    const fetchProfileData = () => {
+      if (currentUser?.uid) {
+        fetch(`http://localhost:5000/api/ba/settings?uid=${currentUser.uid}&t=${Date.now()}`)
+          .then(res => res.json())
+          .then(json => {
+            if (json.success && json.data) {
+              setProfileImage(json.data.profileImage || null);
+              setFullName(json.data.fullName || "Business Analyst");
+            }
+          })
+          .catch(console.error);
+      }
+    };
+
+    fetchProfileData();
+
+    const handleProfileUpdate = (e) => {
+      if (e.detail) {
+        setProfileImage(e.detail.profileImage || null);
+        setFullName(e.detail.fullName || "Business Analyst");
+      } else {
+        fetchProfileData();
+      }
+    };
+
+    window.addEventListener("profileUpdated", handleProfileUpdate);
+    return () => window.removeEventListener("profileUpdated", handleProfileUpdate);
+  }, [currentUser]);
+
   useEffect(() => {
     const fetchNotifications = async () => {
       if (!currentUser?.uid || userData?.notifications?.inApp === false) {
@@ -49,7 +75,6 @@ export default function BATopBar() {
         setNotifications([]);
         return;
       }
-
       try {
         const response = await fetch(`http://localhost:5000/api/client/notifications?uid=${currentUser.uid}`);
         const data = await response.json();
@@ -61,19 +86,13 @@ export default function BATopBar() {
         console.error("Error fetching notifications:", error);
       }
     };
-    
     fetchNotifications();
   }, [currentUser, userData?.notifications?.inApp]);
 
-  // Handle click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
-        setIsProfileOpen(false);
-      }
-      if (notifRef.current && !notifRef.current.contains(event.target)) {
-        setIsNotifOpen(false);
-      }
+      if (profileRef.current && !profileRef.current.contains(event.target)) setIsProfileOpen(false);
+      if (notifRef.current && !notifRef.current.contains(event.target)) setIsNotifOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -81,7 +100,9 @@ export default function BATopBar() {
 
   const getInitials = (name) => {
     if (!name || name === "Loading...") return "BA";
-    return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
+    const parts = name.split(" ");
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
   };
 
   const handleLogout = async () => {
@@ -93,7 +114,6 @@ export default function BATopBar() {
     }
   };
 
-  // --- BA SPECIFIC SEARCH ---
   const handleSearch = async (e) => {
     if (e.key === 'Enter' && searchTerm.trim() !== "") {
       setIsSearching(true);
@@ -102,7 +122,7 @@ export default function BATopBar() {
         const data = await response.json();
         if (data.success) setSearchResults(data.data);
       } catch (error) {
-        console.error("Error communicating with backend:", error);
+        console.error("Error", error);
       } finally {
         setIsSearching(false);
       }
@@ -112,7 +132,6 @@ export default function BATopBar() {
   const handleBellClick = async () => {
     setIsNotifOpen(!isNotifOpen);
     setIsProfileOpen(false);
-    
     if (hasNewNotifications) {
       setHasNewNotifications(false);
       try {
@@ -123,7 +142,7 @@ export default function BATopBar() {
         });
         setNotifications(prev => prev.map(n => ({...n, isRead: true})));
       } catch (error) {
-        console.error("Failed to mark notifications read", error);
+        console.error("Error", error);
       }
     }
   };
@@ -132,7 +151,6 @@ export default function BATopBar() {
     <>
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 h-20 flex items-center justify-between px-4 md:px-6">
         
-        {/* LEFT SIDE: Hamburger & Logo */}
         <div className="flex items-center flex-shrink-0 w-auto md:w-64">
           <button 
             onClick={() => setIsMobileMenuOpen(true)}
@@ -145,7 +163,6 @@ export default function BATopBar() {
           </Link>
         </div>
 
-        {/* CENTER: SEARCH BAR (Hidden on Mobile) */}
         <div className="hidden md:flex flex-1 max-w-2xl px-4 relative">
           <div className="relative w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -154,7 +171,7 @@ export default function BATopBar() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleSearch} 
-              placeholder="Search requirements or tasks by ID..." 
+              placeholder="Search requirements..." 
               className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 pl-12 pr-10 py-3 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all border border-transparent focus:border-blue-100"
             />
             {isSearching && (
@@ -170,7 +187,6 @@ export default function BATopBar() {
             )}
           </div>
 
-          {/* SEARCH RESULTS DROPDOWN */}
           {searchResults && (
             <div className="absolute top-full left-4 right-4 mt-2 bg-white border border-gray-100 rounded-xl shadow-lg p-2 z-50 max-h-80 overflow-y-auto">
               <div className="flex justify-between items-center px-3 py-2 border-b border-gray-50 mb-2">
@@ -207,10 +223,8 @@ export default function BATopBar() {
           )}
         </div>
 
-        {/* RIGHT CONTROLS: Notifs & Profile */}
         <div className="flex items-center space-x-2 md:space-x-6 flex-shrink-0">
           
-          {/* NOTIFICATION BELL */}
           <div className="relative" ref={notifRef}>
             <button 
               className={`relative p-2 text-gray-500 hover:text-navy transition-colors rounded-full ${isNotifOpen ? 'bg-blue-50 text-primary' : 'hover:bg-gray-50'}`}
@@ -253,7 +267,6 @@ export default function BATopBar() {
             )}
           </div>
 
-          {/* USER PROFILE DROPDOWN */}
           <div className="relative" ref={profileRef}>
             <button 
               onClick={() => {
@@ -262,17 +275,17 @@ export default function BATopBar() {
               }}
               className="flex items-center space-x-2 md:space-x-3 focus:outline-none group"
             >
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs md:text-sm shadow-sm group-hover:shadow-md transition-shadow overflow-hidden ring-2 ring-white">
-                {userData?.profileImage ? (
-                  <img src={userData.profileImage} alt="Profile" className="w-full h-full object-cover" />
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#007BFF] flex items-center justify-center text-white font-bold text-xs md:text-sm shadow-sm group-hover:shadow-md transition-shadow overflow-hidden ring-2 ring-white">
+                {profileImage ? (
+                  <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
-                  getInitials(userData?.fullName)
+                  getInitials(fullName)
                 )}
               </div>
 
               <div className="hidden md:flex items-center space-x-1">
                 <span className="text-sm font-semibold text-navy">
-                  {userData?.fullName || "Loading..."}
+                  {fullName}
                 </span>
                 <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isProfileOpen ? "rotate-180" : ""}`} />
               </div>
@@ -281,8 +294,8 @@ export default function BATopBar() {
             {isProfileOpen && (
               <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
                 <div className="px-5 py-3 border-b border-gray-50">
-                  <p className="text-sm font-bold text-navy truncate">{userData?.fullName}</p>
-                  <p className="text-xs text-gray-500 truncate mt-0.5">{userData?.email}</p>
+                  <p className="text-sm font-bold text-navy truncate">{fullName}</p>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{userData?.email || currentUser?.email}</p>
                 </div>
                 <div className="py-2">
                   <Link 
@@ -307,16 +320,13 @@ export default function BATopBar() {
         </div>
       </header>
 
-      {/* MOBILE MENU SLIDE-OUT DRAWER */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
-          {/* Dark Overlay */}
           <div 
             className="fixed inset-0 bg-navy/40 backdrop-blur-sm transition-opacity"
             onClick={() => setIsMobileMenuOpen(false)}
           ></div>
           
-          {/* Drawer */}
           <div className="relative w-72 max-w-[80vw] bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-left duration-300">
             <div className="p-6 flex justify-between items-center border-b border-gray-50">
               <img src={logoDark} alt="NexBA Logo" className="h-6 w-auto object-contain" />

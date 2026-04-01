@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const clientController = require('../controllers/clientController');
-const baController = require('../controllers/baController'); // <-- NEW: Import BA Controller
+const baController = require('../controllers/baController'); 
 
 // Ensure the middleware is applied to ALL routes
 const auth = clientController.requireUid;
@@ -15,14 +15,15 @@ router.get('/recent-activity', auth, clientController.getRecentActivity);
 router.get('/search', auth, clientController.searchRequirements);
 router.get('/requests', auth, clientController.getAllRequests);
 
-// Clarifications & Messages
+// Clarifications
 router.get('/clarifications', auth, clientController.getClarifications);
-
-// <-- CRITICAL FIX: Use baController for the answer logic!
 router.post('/clarifications/:id/answer', auth, baController.answerClarification);
 
-router.get('/messages', auth, clientController.getMessages);
-router.post('/messages', auth, clientController.sendMessage);
+// --- UPDATED COMMUNICATION HUB ROUTES ---
+router.get('/chat/projects', auth, clientController.getChatProjects);
+router.get('/chat/:reqId', auth, clientController.getProjectMessages);
+router.post('/chat/:reqId', auth, clientController.sendProjectMessage);
+router.put('/chat/:reqId/read', auth, clientController.markProjectMessagesRead); // Clears unread badges!
 
 // Approvals & Archive
 router.get('/approvals', auth, clientController.getApprovals);

@@ -1,4 +1,4 @@
-const { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BACommunicationModel } = require('../models/BAModels');
+const { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BACommunicationHubModel, BACommunicationModel, BAProgressModel, BAUserModel } = require('../models/BAModels');
 const { db } = require('../config/firebase');
 
 const requireBaId = (req, res, next) => {
@@ -305,7 +305,6 @@ const updateChangeStatus = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- NEW VERIFICATION ENDPOINTS ---
 const getVerificationTasks = async (req, res) => {
   try {
     const verifications = await BAVerificationModel.getPendingVerifications(req.baId);
@@ -327,6 +326,75 @@ const rejectTaskVerification = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+const getChatRequirements = async (req, res) => {
+  try {
+    const reqs = await BACommunicationHubModel.getChatRequirementsList(req.baId);
+    res.json({ success: true, data: reqs });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const getChatMessages = async (req, res) => {
+  try {
+    const { reqId, channel } = req.params;
+    const msgs = await BACommunicationHubModel.getMessagesForRequirement(reqId, channel);
+    res.json({ success: true, data: msgs });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const sendChatMessage = async (req, res) => {
+  try {
+    const { reqId, channel } = req.params;
+    const { text, fileData, senderName } = req.body;
+    const newMsg = await BACommunicationHubModel.sendMessage(reqId, req.baId, senderName, channel, text, fileData);
+    res.json({ success: true, data: newMsg });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const markMessagesRead = async (req, res) => {
+  try {
+    const { reqId, channel } = req.params;
+    const result = await BACommunicationHubModel.markMessagesAsRead(reqId, channel);
+    res.json({ success: true, data: result });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const getProgressAndReports = async (req, res) => {
+  try {
+    const data = await BAProgressModel.getProgressData(req.baId);
+    res.json({ success: true, data });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+// --- NEW: SETTINGS CONTROLLERS ---
+const getSettings = async (req, res) => {
+  try {
+    const data = await BAUserModel.getSettings(req.baId);
+    res.json({ success: true, data });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const updateGeneralSettings = async (req, res) => {
+  try {
+    await BAUserModel.updateGeneralSettings(req.baId, req.body);
+    res.json({ success: true, message: "Settings updated" });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const updateSecuritySettings = async (req, res) => {
+  try {
+    await BAUserModel.updateSecuritySettings(req.baId, req.body.newPassword);
+    res.json({ success: true, message: "Password updated" });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
+};
+
+const updateNotificationSettings = async (req, res) => {
+  try {
+    const { key, value } = req.body;
+    await BAUserModel.updateNotificationSettings(req.baId, key, value);
+    res.json({ success: true, message: "Notification preference updated" });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
 module.exports = { 
   requireBaId,
   getDashboardOverview, getInboxRequirements, claimRequirement, searchAllItems, getAnalyzedHistory, 
@@ -334,5 +402,8 @@ module.exports = {
   sendClarificationQuestions, getReqClarifications, answerClarification, 
   getReadyRequirements, getDevelopers, generateTasksWithAI, saveAssignedTasks, removeTaskFromQueue, sendToEngineering,
   getChangeRequests, updateChangeStatus,
-  getVerificationTasks, approveTaskVerification, rejectTaskVerification // Exporting the new verification models
+  getVerificationTasks, approveTaskVerification, rejectTaskVerification,
+  getChatRequirements, getChatMessages, sendChatMessage, markMessagesRead,
+  getProgressAndReports,
+  getSettings, updateGeneralSettings, updateSecuritySettings, updateNotificationSettings // <-- Exported here
 };

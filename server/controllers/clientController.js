@@ -140,7 +140,64 @@ const answerClarification = async (req, res) => {
   }
 };
 
-// --- APPROVALS ---
+// ============================================================================
+// --- COMMUNICATION HUB (ADVANCED CHAT) ---
+// ============================================================================
+
+const getChatProjects = async (req, res) => {
+  try {
+      const projects = await CommunicationModel.getChatProjects(req.uid);
+      res.json({ success: true, data: projects });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const getProjectMessages = async (req, res) => {
+  try {
+      const msgs = await CommunicationModel.getMessagesForProject(req.params.reqId);
+      res.json({ success: true, data: msgs });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const sendProjectMessage = async (req, res) => {
+  try {
+      const { text, fileData, senderName } = req.body;
+      const newMsg = await CommunicationModel.sendMessage(req.params.reqId, req.uid, senderName, text, fileData);
+      res.json({ success: true, data: newMsg });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+const markProjectMessagesRead = async (req, res) => {
+  try {
+      await CommunicationModel.markMessagesAsRead(req.params.reqId, req.uid);
+      res.json({ success: true });
+  } catch (error) { res.status(500).json({ success: false }); }
+};
+
+// --- LEGACY MESSAGES (Kept for compatibility) ---
+const getMessages = async (req, res) => {
+  try {
+    const messages = await CommunicationModel.getMessages(req.uid);
+    res.json({ success: true, data: messages });
+  } catch (error) { 
+    console.error("Get Messages Error:", error);
+    res.status(500).json({ success: false }); 
+  }
+};
+
+const sendMessage = async (req, res) => {
+  try {
+    const docId = await CommunicationModel.sendMessage(req.body, req.uid);
+    res.json({ success: true, id: docId });
+  } catch (error) { 
+    console.error("Send Message Error:", error);
+    res.status(500).json({ success: false }); 
+  }
+};
+
+// ============================================================================
+// --- APPROVALS & ARCHIVE ---
+// ============================================================================
+
 const getApprovals = async (req, res) => {
   try {
     const approvals = await RequirementModel.getApprovals(req.uid);
@@ -176,28 +233,6 @@ const requestChangeForRequirement = async (req, res) => {
   }
 };
 
-// --- MESSAGES ---
-const getMessages = async (req, res) => {
-  try {
-    const messages = await CommunicationModel.getMessages(req.uid);
-    res.json({ success: true, data: messages });
-  } catch (error) { 
-    console.error("Get Messages Error:", error);
-    res.status(500).json({ success: false }); 
-  }
-};
-
-const sendMessage = async (req, res) => {
-  try {
-    const docId = await CommunicationModel.sendMessage(req.body, req.uid);
-    res.json({ success: true, id: docId });
-  } catch (error) { 
-    console.error("Send Message Error:", error);
-    res.status(500).json({ success: false }); 
-  }
-};
-
-// --- ARCHIVE ---
 const getArchivedRequirements = async (req, res) => {
   try {
     const archives = await RequirementModel.getArchivedRequirements(req.uid);
@@ -208,7 +243,10 @@ const getArchivedRequirements = async (req, res) => {
   }
 };
 
+// ============================================================================
 // --- SETTINGS ---
+// ============================================================================
+
 const getSettings = async (req, res) => {
   try {
     const settings = await UserModel.getSettings(req.uid);
@@ -253,7 +291,7 @@ const updateNotificationSettings = async (req, res) => {
 };
 
 // ============================================================================
-// --- NOTIFICATION ENDPOINTS ---
+// --- NOTIFICATIONS ---
 // ============================================================================
 
 const getNotifications = async (req, res) => {
@@ -281,7 +319,8 @@ module.exports = {
   submitProject, getOverviewStats, getProjectProgress, getChangeRequests, 
   getActionItems, getRecentActivity, searchRequirements, getAllRequests,
   getClarifications, answerClarification, getApprovals, approveRequirement,
-  requestChangeForRequirement, getMessages, sendMessage, getArchivedRequirements,
+  requestChangeForRequirement, getArchivedRequirements,
   getSettings, updateGeneralSettings, updateSecuritySettings, updateNotificationSettings,
-  getNotifications, markNotificationsRead 
+  getNotifications, markNotificationsRead,
+  getChatProjects, getProjectMessages, sendProjectMessage, markProjectMessagesRead // <-- New Hub functions exported
 };

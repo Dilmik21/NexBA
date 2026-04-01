@@ -47,7 +47,7 @@ class RequirementModel {
       title: projectData.title || "Untitled Project",
       description: projectData.description || "No description provided.",
       reqId: customReqId,
-      uid: safeUid, // CORRECT FIELD NAME
+      uid: safeUid, 
       baId: "",      
       clientName: clientName,             
       submittedBy: clientName,            
@@ -65,7 +65,7 @@ class RequirementModel {
     await db.collection('requirements').add(newRequirement);
 
     await db.collection('activity_logs').add({
-      uid: safeUid, // CORRECT FIELD NAME
+      uid: safeUid,
       user: clientName, 
       action: `Launched new request: ${projectData.title}`,
       time: admin.firestore.FieldValue.serverTimestamp(),
@@ -78,15 +78,7 @@ class RequirementModel {
 
   static async getAllRequests(uid) {
     const safeUid = uid || "INVALID";
-    
-    // --- DEBUG LOGS ADDED HERE ---
-    console.log(`📡 [Backend DB]: Fetching ALL requests for UID -> ${safeUid}`);
-    
     const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
-    
-    console.log(`✅ [Backend DB]: Found ${snapshot.docs.length} documents for this UID.`);
-    // -----------------------------
-
     let requests = [];
     
     snapshot.forEach(doc => {
@@ -199,27 +191,21 @@ class RequirementModel {
     let docs = [];
     snapshot.forEach(doc => docs.push(doc));
 
-    // Sort all documents locally by time (newest first) to avoid Firebase Index errors
     docs.sort((a, b) => {
       const timeA = a.data().time?.toMillis ? a.data().time.toMillis() : 0;
       const timeB = b.data().time?.toMillis ? b.data().time.toMillis() : 0;
       return timeB - timeA; 
     });
 
-    // --- CRITICAL FIX: THE DATABASE VACUUM CLEANER ---
-    // If this user has more than 5 activities saved, permanently delete the old ones!
     if (docs.length > 5) {
       const batch = db.batch();
       for (let i = 5; i < docs.length; i++) {
         batch.delete(docs[i].ref);
       }
       await batch.commit();
-      console.log(`🧹 [Auto-Cleanup]: Permanently deleted ${docs.length - 5} old activities for UID: ${safeUid}`);
     }
 
     let activities = [];
-    
-    // Only process the top 5 documents
     const top5Docs = docs.slice(0, 5);
     
     top5Docs.forEach(doc => {
@@ -227,7 +213,7 @@ class RequirementModel {
       activities.push({
         id: data.reqId || doc.id.substring(0, 6),
         action: data.action,
-        time: getTimeAgo(data.time) || "Recently", // Made this dynamic so it shows exact time!
+        time: getTimeAgo(data.time) || "Recently",
         dotColor: data.dotColor || "bg-blue-500",
         rawDate: data.time || 0
       });
@@ -430,53 +416,137 @@ class CommunicationModel {
     await clarificationRef.update(updatePayload);
   }
 
-  static async getMessages(uid) {
-    const safeUid = uid || "INVALID";
-    const snapshot = await db.collection('messages').where('uid', '==', safeUid).get();
-      
-    let messages = [];
+  // --- ADVANCED CLIENT COMMUNICATION HUB METHODS ---
+  static async getChatProjects(uid) {
+    const reqsSnap = await db.collection('requirements').where('uid', '==', uid || "INVALID").get();
+    let projectsMap = {};
     
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      let formattedTime = "Just now";
-      let rawDate = 0;
-      
-      if (data.timestamp) {
-        const dateObj = data.timestamp.toDate();
-        rawDate = dateObj.getTime();
-        formattedTime = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-      }
-
-      messages.push({
-        id: doc.id,
-        reqId: data.reqId || "GLOBAL",
-        text: data.text || "",
-        fileName: data.fileName || null,
-        sender: data.sender || "BA",
-        senderName: data.senderName || "Your Team",
-        timestamp: formattedTime,
-        rawDate: rawDate
-      });
+    // --- FORCE REAL BA NAME LOOKUP ---
+    // Load ALL users into memory so we can guarantee we show real names
+    const usersSnap = await db.collection('users').get();
+    let userMap = {};
+    let fallbackBaName = "Business Analyst";
+    
+    usersSnap.forEach(doc => {
+        const d = doc.data();
+        const actualName = d.fullName || d.name;
+        userMap[doc.id] = actualName;
+        if (d.role === 'BA' || d.role === 'Business Analyst') {
+            fallbackBaName = actualName; // Grab at least one valid BA name for empty projects
+        }
     });
+
+    reqsSnap.forEach(doc => {
+        const data = doc.data();
+        const reqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
+        
+        let finalBaName = fallbackBaName;
+        // If the project has an assigned BA ID, use their real mapped name
+        if (data.baId && userMap[data.baId]) {
+            finalBaName = userMap[data.baId];
+        } else if (data.baName && data.baName !== "Unknown BA" && data.baName !== "") {
+            finalBaName = data.baName;
+        }
+
+        projectsMap[reqId] = { 
+            id: reqId, 
+            title: data.title || "Untitled", 
+            baName: finalBaName, // This is now guaranteed to be a real human name
+            unreadCount: 0 
+        };
+    });
+
+    const projectIds = Object.keys(projectsMap);
+    if (projectIds.length > 0) {
+        const msgsSnap = await db.collection('messages')
+            .where('receiverRole', '==', 'Client')
+            .where('read', '==', false)
+            .get();
+
+        msgsSnap.forEach(doc => {
+            const msg = doc.data();
+            if (projectsMap[msg.reqId]) {
+                projectsMap[msg.reqId].unreadCount++;
+            }
+        });
+    }
     
-    messages.sort((a, b) => a.rawDate - b.rawDate);
+    return Object.values(projectsMap);
+  }
+
+  static async getMessagesForProject(reqId) {
+    const msgsSnap = await db.collection('messages').where('reqId', '==', reqId).get();
+    
+    // --- FORCE REAL SENDER NAME LOOKUP FOR EXISTING MESSAGES ---
+    const usersSnap = await db.collection('users').get();
+    let userMap = {};
+    usersSnap.forEach(doc => {
+        userMap[doc.id] = doc.data().fullName || doc.data().name || "Unknown";
+    });
+
+    let messages = [];
+    msgsSnap.forEach(doc => {
+        const msg = doc.data();
+        const isClientChannel = msg.senderRole === 'Client' || msg.receiverRole === 'Client' || (msg.senderRole === 'BA' && msg.receiverRole === 'Client');
+        
+        if (isClientChannel) {
+            let realSenderName = msg.senderName;
+            
+            // If we have a valid senderId, forcefully override "BA Team" or "Client User"
+            if (msg.senderId && userMap[msg.senderId]) {
+                realSenderName = userMap[msg.senderId];
+            }
+
+            messages.push({
+                id: doc.id, 
+                ...msg,
+                senderName: realSenderName, // <--- Retroactive Name Fix
+                timeStr: new Date(msg.createdAt?.toDate?.() || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            });
+        }
+    });
+    messages.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
     return messages;
   }
 
-  static async sendMessage(data, uid) {
-    const safeUid = uid || data.uid || "GUEST_USER";
-    const newMessage = {
-      text: data.text || "",
-      reqId: data.reqId || "GLOBAL",
-      uid: safeUid, 
-      fileName: data.fileName || null,
-      sender: data.sender || "Client",
-      senderName: data.senderName || "Client",
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    };
+  static async sendMessage(reqId, uid, senderName, text, fileData) {
+    let actualName = senderName || "Client";
+    if (uid) {
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+         const d = userDoc.data();
+         actualName = d.fullName || d.name || actualName;
+      }
+    }
 
-    const docRef = await db.collection('messages').add(newMessage);
-    return docRef.id;
+    const newMsgRef = db.collection('messages').doc();
+    const msgObj = { 
+        reqId: reqId, 
+        senderId: uid || "UNKNOWN", 
+        senderName: actualName, 
+        senderRole: "Client", 
+        receiverRole: "BA", 
+        text: text || "", 
+        read: false, 
+        createdAt: admin.firestore.FieldValue.serverTimestamp() 
+    };
+    if (fileData) { msgObj.fileName = fileData.name; msgObj.fileUrl = fileData.base64; }
+    await newMsgRef.set(msgObj);
+    return { id: newMsgRef.id, ...msgObj, timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) };
+  }
+
+  static async markMessagesAsRead(reqId, uid) {
+    const msgsSnap = await db.collection('messages')
+      .where('reqId', '==', reqId)
+      .where('receiverRole', '==', 'Client')
+      .where('read', '==', false)
+      .get();
+
+    if (msgsSnap.empty) return { success: true, count: 0 };
+    const batch = db.batch();
+    msgsSnap.forEach(doc => batch.update(doc.ref, { read: true }));
+    await batch.commit();
+    return { success: true };
   }
 }
 

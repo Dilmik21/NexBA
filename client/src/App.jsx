@@ -24,7 +24,10 @@ import RequirementInbox from "./pages/BA/RequirementInbox";
 import AIAnalysis from "./pages/BA/AIAnalysis";
 import TaskAssignment from "./pages/BA/TaskAssignment";
 import ChangeManagement from "./pages/BA/ChangeManagement"; 
-import VerificationQueue from "./pages/BA/VerificationQueue"; // <-- NEW IMPORT
+import VerificationQueue from "./pages/BA/VerificationQueue";
+import CommunicationHub from "./pages/BA/CommunicationHub";
+import ProgressReports from "./pages/BA/ProgressReports";
+import BASettings from "./pages/BA/BASettings"; // <-- NEW IMPORT
 
 function App() {
   return (
@@ -157,12 +160,39 @@ function App() {
             } 
           />
 
-          {/* NEW: Verification Queue Route */}
           <Route 
             path="/ba/verification" 
             element={
               <ProtectedRoute>
                 <VerificationQueue />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/ba/communication" 
+            element={
+              <ProtectedRoute>
+                <CommunicationHub />
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/ba/reports" 
+            element={
+              <ProtectedRoute>
+                <ProgressReports />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* NEW: Settings Route */}
+          <Route 
+            path="/ba/settings" 
+            element={
+              <ProtectedRoute>
+                <BASettings />
               </ProtectedRoute>
             } 
           />

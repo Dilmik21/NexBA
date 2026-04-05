@@ -6,9 +6,9 @@ import {
   signOut, 
   onAuthStateChanged,
   sendPasswordResetEmail,
-  sendEmailVerification // <-- ADDED THIS
+  sendEmailVerification 
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, onSnapshot } from "firebase/firestore"; // <-- IMPORTED onSnapshot
 
 const AuthContext = createContext();
 
@@ -18,10 +18,11 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userData, setUserData] = useState(null); // Stores Name, Role, Image, etc.
+  const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // NEW: Function to manually refresh user data globally (e.g., after profile picture update)
+  // We keep this function so it doesn't break any existing code, 
+  // but the real-time listener below handles the automatic updates now!
   const refreshUserData = async () => {
     if (currentUser) {
       try {
@@ -36,22 +37,20 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // 1. Sign Up (Creates Auth User + Saves extra data to Firestore + Sends Email)
+  // 1. Sign Up
   async function signup(email, password, additionalData) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // Save the extra fields (Name, Role, Org) to the database
     await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
       email: user.email,
       ...additionalData,
+      isOnline: true,
       createdAt: new Date()
     });
 
-    // --- FORCE THE VERIFICATION EMAIL TO SEND ---
     await sendEmailVerification(user);
-    
     return userCredential;
   }
 
@@ -61,7 +60,15 @@ export function AuthProvider({ children }) {
   }
 
   // 3. Logout
-  function logout() {
+  async function logout() {
+    if (currentUser) {
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        await updateDoc(userRef, { isOnline: false });
+      } catch (error) {
+        console.error("Failed to set user offline on logout:", error);
+      }
+    }
     return signOut(auth);
   }
 
@@ -70,25 +77,65 @@ export function AuthProvider({ children }) {
     return sendPasswordResetEmail(auth, email);
   }
 
-  // 5. Watcher: Checks who is logged in and fetches their extra data
+  // 5. Watcher: Checks who is logged in and manages real-time updates
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let handleTabClose = null;
+    let unsubscribeUserDoc = null; // Variable to hold the real-time listener
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      
       if (user) {
         const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setUserData(docSnap.data());
-        }
+        
+        // --- THE FIX: Real-Time Listener ---
+        // This listens to the database instantly. When you upload a profile pic in settings,
+        // it updates the DB, and this listener instantly updates the TopBar without refreshing!
+        unsubscribeUserDoc = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setUserData(docSnap.data());
+          }
+          setLoading(false); // Turn off loading screen once data arrives
+        }, (error) => {
+          console.error("Real-time profile sync error:", error);
+          setLoading(false);
+        });
+
+        // Set user online when they load the app
+        updateDoc(docRef, { isOnline: true }).catch(err => console.error(err));
+
+        // Set up the tab close listener to turn offline when browser tab closes
+        if (handleTabClose) window.removeEventListener('beforeunload', handleTabClose);
+        
+        handleTabClose = () => {
+          updateDoc(docRef, { isOnline: false }).catch(err => console.error(err));
+        };
+        window.addEventListener('beforeunload', handleTabClose);
+
       } else {
+        // If no user is logged in, clean up listeners
         setUserData(null);
+        setLoading(false);
+        
+        if (unsubscribeUserDoc) {
+          unsubscribeUserDoc();
+          unsubscribeUserDoc = null;
+        }
+        
+        if (handleTabClose) {
+          window.removeEventListener('beforeunload', handleTabClose);
+          handleTabClose = null;
+        }
       }
-      setLoading(false);
     });
-    return unsubscribe;
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUserDoc) unsubscribeUserDoc();
+      if (handleTabClose) window.removeEventListener('beforeunload', handleTabClose);
+    };
   }, []);
 
-  // EXPORT the new refreshUserData function so Settings can trigger it!
   const value = { 
     currentUser, 
     userData, 

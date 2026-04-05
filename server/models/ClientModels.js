@@ -1,7 +1,5 @@
-// --- IMPORTING OUR MODELS ---
 const { admin, db } = require('../config/firebase');
 
-// --- SMART HELPERS ---
 const getTimeAgo = (timestamp) => {
   if (!timestamp) return "Just now";
   const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -118,7 +116,7 @@ class RequirementModel {
     snapshot.forEach(doc => {
       const data = doc.data();
       stats.totalActive++; 
-      if (data.status === "Pending Approval") stats.pendingApprovals++;
+      if (data.status === "Client UAT" || data.status === "Modification Requested" || data.status === "Change Requested") stats.pendingApprovals++;
       if (data.status === "In Analysis" || data.status === "Tasks Assigned") stats.inAnalysis++;
       if (data.status === "Clarification Needed") stats.clarificationsNeeded++;
     });
@@ -168,14 +166,14 @@ class RequirementModel {
     const safeUid = uid || "INVALID";
     const snapshot = await db.collection('requirements')
       .where('uid', '==', safeUid) 
-      .where('status', 'in', ['Pending Approval', 'Clarification Needed']).get();
+      .where('status', 'in', ['Client UAT', 'Pending Approval', 'Clarification Needed', 'Modification Requested', 'Change Requested']).get();
       
     let pendingApprovals = [], clarificationsNeeded = [];
 
     snapshot.forEach(doc => {
       const data = doc.data();
       const reqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
-      if (data.status === "Pending Approval") {
+      if (data.status === "Client UAT" || data.status === "Pending Approval" || data.status === "Modification Requested" || data.status === "Change Requested") {
         pendingApprovals.push({ id: reqId, title: data.title, meta: "Awaiting your review" });
       } else {
         clarificationsNeeded.push({ id: reqId, title: data.title, meta: "Question from BA", quote: data.clarificationQuestion || "Needs more details." });
@@ -247,14 +245,17 @@ class RequirementModel {
     const safeUid = uid || "INVALID";
     const snapshot = await db.collection('requirements')
       .where('uid', '==', safeUid) 
-      .where('status', '==', 'Awaiting Review').get();
+      .where('status', 'in', ['Client UAT', 'Modification Requested', 'Change Requested']).get(); 
+      
     let approvals = [];
     
     snapshot.forEach(doc => {
       const data = doc.data();
       let formattedDate = "Pending";
-      if (data.submittedAt) {
-        const dateObj = data.submittedAt.toDate();
+      const actualDate = data.verificationSubmittedAt || data.updatedAt || data.submittedAt;
+      
+      if (actualDate) {
+        const dateObj = actualDate.toDate ? actualDate.toDate() : new Date(actualDate);
         formattedDate = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
       }
 
@@ -262,83 +263,162 @@ class RequirementModel {
         id: doc.id,
         reqId: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
         title: data.title || 'Untitled Feature',
-        submittedBy: data.submittedBy || 'Naveen Dilhan',
+        submittedBy: data.teamLeaderName || data.developerName || 'Developer Team',
         submittedAt: formattedDate,
-        evidenceSubmitted: data.evidenceSubmitted || true, 
-        baVerified: data.baVerified || true, 
-        evidenceImage: data.evidenceImage || null,
-        commitLink: data.commitLink || 'github.com/nexba/core/commit/a3f8c21',
-        description: data.description || 'No description provided.'
+        status: data.status,
+        evidenceSubmitted: true, 
+        baVerified: true, 
+        evidence: data.evidence || null, 
+        description: data.description || 'No description provided.',
+        rejectionReason: data.rejectionReason || null
       });
     });
     return approvals;
   }
 
-  static async approveRequirement(id) {
-    const requirementRef = db.collection('requirements').doc(id);
-    const doc = await requirementRef.get();
-    if (!doc.exists) throw new Error("Requirement not found");
-
-    await requirementRef.update({
-      status: "Approved & Live",
+  static async approveRequirement(reqId) {
+    const snapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
+    if (snapshot.empty) throw new Error("Requirement not found");
+    
+    const batch = db.batch();
+    
+    batch.update(snapshot.docs[0].ref, {
+      status: "Completed",
+      rejectionReason: admin.firestore.FieldValue.delete(), 
+      isChangeRequest: false,
       approvedAt: admin.firestore.FieldValue.serverTimestamp()
     });
+
+    const tasksQuery = await db.collection('tasks').where('reqId', '==', reqId).get();
+    tasksQuery.forEach(tDoc => {
+       batch.update(tDoc.ref, { status: "Completed" });
+    });
+
+    const crQuery1 = await db.collection('change_requests').where('reqId', '==', reqId).get();
+    crQuery1.forEach(crDoc => {
+       batch.update(crDoc.ref, { status: "Resolved", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+
+    const crQuery2 = await db.collection('changeRequests').where('reqId', '==', reqId).get();
+    crQuery2.forEach(crDoc => {
+       batch.update(crDoc.ref, { status: "Resolved", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+
+    await batch.commit();
+    return { success: true };
   }
 
-  static async requestChange(id, changeType, changeDescription) {
-    const requirementRef = db.collection('requirements').doc(id);
-    const doc = await requirementRef.get();
-    if (!doc.exists) throw new Error("Requirement not found");
+  static async requestChange(reqId, changeType, changeDescription) {
+    const snapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
+    if (snapshot.empty) throw new Error("Requirement not found");
 
-    await requirementRef.update({
-      status: "Modification Requested",
+    const reqDoc = snapshot.docs[0];
+    const reqData = reqDoc.data();
+    const batch = db.batch();
+    
+    batch.update(reqDoc.ref, {
+      status: "Change Requested", 
+      isChangeRequest: true,
       changeRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastChangeType: changeType,
-      lastChangeDescription: changeDescription
+      lastChangeType: changeType || "Client Review Feedback",
+      rejectionReason: `Client Feedback: ${changeDescription}` 
     });
+
+    const tasksQuery = await db.collection('tasks').where('reqId', '==', reqId).get();
+    tasksQuery.forEach(tDoc => {
+       if (tDoc.data().status === 'Client UAT') {
+           batch.update(tDoc.ref, { status: "In Progress" });
+       }
+    });
+
+    const generatedCrId = `CR-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const crRef1 = db.collection('change_requests').doc();
+    batch.set(crRef1, {
+      id: crRef1.id,
+      crId: generatedCrId,
+      reqId: reqId,
+      title: reqData.title || "Untitled",
+      type: changeType || "Scope Change",
+      clientDescription: changeDescription,
+      description: changeDescription, 
+      proposedText: changeDescription,
+      status: "Pending", 
+      riskLevel: "Pending",
+      impactStatus: "Analyzing Impact...",
+      uid: reqData.uid,
+      clientId: reqData.uid,
+      clientName: reqData.clientName || "Client",
+      baId: reqData.baId || "", 
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    const crRef2 = db.collection('changeRequests').doc();
+    batch.set(crRef2, {
+      id: crRef2.id,
+      crId: generatedCrId, 
+      reqId: reqId,
+      title: reqData.title || "Untitled",
+      type: changeType || "Scope Change",
+      clientDescription: changeDescription,
+      description: changeDescription,
+      proposedText: changeDescription,
+      status: "Pending",
+      riskLevel: "Pending",
+      impactStatus: "Analyzing Impact...",
+      uid: reqData.uid,
+      clientId: reqData.uid,
+      clientName: reqData.clientName || "Client",
+      baId: reqData.baId || "",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+    return { success: true };
   }
 
   static async getArchivedRequirements(uid) {
     const safeUid = uid || "INVALID";
-    const snapshot = await db.collection('requirements')
-      .where('uid', '==', safeUid) 
-      .where('status', 'in', ['Approved & Live', 'Closed — Superseded', 'Approved', 'Completed']).get();
+    const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     
     let archives = [];
+    const archivedStatuses = ['Approved & Live', 'Closed — Superseded', 'Approved', 'Completed'];
     
     snapshot.forEach(doc => {
       const data = doc.data();
-      let submittedDate = "Unknown";
-      let completedDate = "Unknown";
-      let rawDate = 0;
+      
+      if (archivedStatuses.includes(data.status)) {
+          let submittedDate = "Unknown";
+          let completedDate = "Recently";
+          let rawDate = 0;
 
-      if (data.submittedAt) {
-        const dateObj = data.submittedAt.toDate();
-        rawDate = dateObj.getTime();
-        submittedDate = dateObj.toISOString().split('T')[0];
-      }
-      if (data.approvedAt) {
-        const dateObj = data.approvedAt.toDate();
-        completedDate = dateObj.toISOString().split('T')[0];
-      } else if (data.submittedAt) {
-        const dateObj = data.submittedAt.toDate();
-        dateObj.setDate(dateObj.getDate() + 14); 
-        completedDate = dateObj.toISOString().split('T')[0];
-      }
+          if (data.submittedAt) {
+            const dateObj = data.submittedAt.toDate ? data.submittedAt.toDate() : new Date(data.submittedAt);
+            rawDate = dateObj.getTime();
+            submittedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          }
+          if (data.approvedAt) {
+            const dateObj = data.approvedAt.toDate ? data.approvedAt.toDate() : new Date(data.approvedAt);
+            completedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          } else if (data.updatedAt) {
+            const dateObj = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+            completedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          }
 
-      archives.push({
-        id: doc.id,
-        reqId: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
-        title: data.title || 'Untitled Feature',
-        submittedAt: submittedDate,
-        completedAt: completedDate,
-        developer: data.submittedBy || 'Naveen Dilhan', 
-        status: data.status === 'Approved' ? 'Approved & Live' : (data.status || 'Approved & Live'),
-        evidenceImage: data.evidenceImage || null,
-        commitLink: data.commitLink || 'github.com/nexba/core/commit/a3f8c21',
-        description: data.description || 'No description provided.',
-        rawDate: rawDate
-      });
+          archives.push({
+            id: doc.id,
+            reqId: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
+            title: data.title || 'Untitled Feature',
+            submittedAt: submittedDate,
+            completedAt: completedDate,
+            developer: data.teamLeaderName || data.developerName || 'Development Team',
+            status: data.status,
+            commitLink: data.evidence?.githubLink || data.commitLink || null,
+            rawDate: rawDate
+          });
+      }
     });
 
     archives.sort((a, b) => b.rawDate - a.rawDate);
@@ -416,23 +496,25 @@ class CommunicationModel {
     await clarificationRef.update(updatePayload);
   }
 
-  // --- ADVANCED CLIENT COMMUNICATION HUB METHODS ---
   static async getChatProjects(uid) {
     const reqsSnap = await db.collection('requirements').where('uid', '==', uid || "INVALID").get();
     let projectsMap = {};
     
-    // --- FORCE REAL BA NAME LOOKUP ---
-    // Load ALL users into memory so we can guarantee we show real names
     const usersSnap = await db.collection('users').get();
     let userMap = {};
     let fallbackBaName = "Business Analyst";
+    let fallbackBaImage = null;
+    let fallbackBaOnline = false;
     
     usersSnap.forEach(doc => {
         const d = doc.data();
-        const actualName = d.fullName || d.name;
-        userMap[doc.id] = actualName;
+        const actualName = d.fullName || d.name || "Unknown";
+        const profileImg = d.profileImage || d.photoURL || d.avatar || d.imageUrl || null;
+        userMap[doc.id] = { name: actualName, profileImage: profileImg, isOnline: d.isOnline || false };
         if (d.role === 'BA' || d.role === 'Business Analyst') {
-            fallbackBaName = actualName; // Grab at least one valid BA name for empty projects
+            fallbackBaName = actualName;
+            fallbackBaImage = profileImg;
+            fallbackBaOnline = d.isOnline || false;
         }
     });
 
@@ -441,66 +523,57 @@ class CommunicationModel {
         const reqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
         
         let finalBaName = fallbackBaName;
-        // If the project has an assigned BA ID, use their real mapped name
+        let finalBaImage = fallbackBaImage;
+        let finalBaOnline = fallbackBaOnline;
+
         if (data.baId && userMap[data.baId]) {
-            finalBaName = userMap[data.baId];
-        } else if (data.baName && data.baName !== "Unknown BA" && data.baName !== "") {
+            finalBaName = userMap[data.baId].name;
+            finalBaImage = userMap[data.baId].profileImage;
+            finalBaOnline = userMap[data.baId].isOnline;
+        } 
+        else if (data.baName && data.baName !== "Unknown BA" && data.baName !== "") {
             finalBaName = data.baName;
+            const matchedUser = Object.values(userMap).find(u => u.name === data.baName);
+            if (matchedUser) {
+                finalBaImage = matchedUser.profileImage;
+                finalBaOnline = matchedUser.isOnline;
+            }
         }
 
         projectsMap[reqId] = { 
-            id: reqId, 
-            title: data.title || "Untitled", 
-            baName: finalBaName, // This is now guaranteed to be a real human name
-            unreadCount: 0 
+            id: reqId, title: data.title || "Untitled", baName: finalBaName, baImage: finalBaImage,
+            isOnline: finalBaOnline, unreadCount: 0 
         };
     });
 
     const projectIds = Object.keys(projectsMap);
     if (projectIds.length > 0) {
         const msgsSnap = await db.collection('messages')
-            .where('receiverRole', '==', 'Client')
-            .where('read', '==', false)
-            .get();
+            .where('receiverRole', '==', 'Client').where('read', '==', false).get();
 
         msgsSnap.forEach(doc => {
             const msg = doc.data();
-            if (projectsMap[msg.reqId]) {
-                projectsMap[msg.reqId].unreadCount++;
-            }
+            if (projectsMap[msg.reqId]) { projectsMap[msg.reqId].unreadCount++; }
         });
     }
-    
     return Object.values(projectsMap);
   }
 
   static async getMessagesForProject(reqId) {
     const msgsSnap = await db.collection('messages').where('reqId', '==', reqId).get();
-    
-    // --- FORCE REAL SENDER NAME LOOKUP FOR EXISTING MESSAGES ---
     const usersSnap = await db.collection('users').get();
     let userMap = {};
-    usersSnap.forEach(doc => {
-        userMap[doc.id] = doc.data().fullName || doc.data().name || "Unknown";
-    });
+    usersSnap.forEach(doc => { userMap[doc.id] = doc.data().fullName || doc.data().name || "Unknown"; });
 
     let messages = [];
     msgsSnap.forEach(doc => {
         const msg = doc.data();
         const isClientChannel = msg.senderRole === 'Client' || msg.receiverRole === 'Client' || (msg.senderRole === 'BA' && msg.receiverRole === 'Client');
-        
         if (isClientChannel) {
             let realSenderName = msg.senderName;
-            
-            // If we have a valid senderId, forcefully override "BA Team" or "Client User"
-            if (msg.senderId && userMap[msg.senderId]) {
-                realSenderName = userMap[msg.senderId];
-            }
-
+            if (msg.senderId && userMap[msg.senderId]) realSenderName = userMap[msg.senderId];
             messages.push({
-                id: doc.id, 
-                ...msg,
-                senderName: realSenderName, // <--- Retroactive Name Fix
+                id: doc.id, ...msg, senderName: realSenderName, 
                 timeStr: new Date(msg.createdAt?.toDate?.() || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
             });
         }
@@ -513,22 +586,12 @@ class CommunicationModel {
     let actualName = senderName || "Client";
     if (uid) {
       const userDoc = await db.collection('users').doc(uid).get();
-      if (userDoc.exists) {
-         const d = userDoc.data();
-         actualName = d.fullName || d.name || actualName;
-      }
+      if (userDoc.exists) actualName = userDoc.data().fullName || userDoc.data().name || actualName;
     }
-
     const newMsgRef = db.collection('messages').doc();
     const msgObj = { 
-        reqId: reqId, 
-        senderId: uid || "UNKNOWN", 
-        senderName: actualName, 
-        senderRole: "Client", 
-        receiverRole: "BA", 
-        text: text || "", 
-        read: false, 
-        createdAt: admin.firestore.FieldValue.serverTimestamp() 
+        reqId: reqId, senderId: uid || "UNKNOWN", senderName: actualName, senderRole: "Client", 
+        receiverRole: "BA", text: text || "", read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() 
     };
     if (fileData) { msgObj.fileName = fileData.name; msgObj.fileUrl = fileData.base64; }
     await newMsgRef.set(msgObj);
@@ -537,11 +600,7 @@ class CommunicationModel {
 
   static async markMessagesAsRead(reqId, uid) {
     const msgsSnap = await db.collection('messages')
-      .where('reqId', '==', reqId)
-      .where('receiverRole', '==', 'Client')
-      .where('read', '==', false)
-      .get();
-
+      .where('reqId', '==', reqId).where('receiverRole', '==', 'Client').where('read', '==', false).get();
     if (msgsSnap.empty) return { success: true, count: 0 };
     const batch = db.batch();
     msgsSnap.forEach(doc => batch.update(doc.ref, { read: true }));
@@ -555,30 +614,16 @@ class UserModel {
     if (!uid) return null;
     const docRef = db.collection('users').doc(uid);
     const doc = await docRef.get();
-
     if (!doc.exists) {
-      const initialData = {
-        fullName: "",
-        email: "", 
-        organization: "",
-        role: "Client",
-        profileImage: null, 
-        notifications: { email: true, inApp: true, weeklyDigest: false }
-      };
-      await docRef.set(initialData);
-      return initialData;
+      const initialData = { fullName: "", email: "", organization: "", role: "Client", profileImage: null, notifications: { email: true, inApp: true, weeklyDigest: false } };
+      await docRef.set(initialData); return initialData;
     }
     return doc.data();
   }
 
   static async updateGeneralSettings(uid, data) {
     if (!uid) throw new Error("UID missing");
-    await db.collection('users').doc(uid).update({
-      fullName: data.fullName, 
-      email: data.email, 
-      organization: data.organization,
-      profileImage: data.profileImage || null 
-    });
+    await db.collection('users').doc(uid).update({ fullName: data.fullName, email: data.email, organization: data.organization, profileImage: data.profileImage || null });
   }
 
   static async updateSecuritySettings(uid, newPassword) {
@@ -588,59 +633,58 @@ class UserModel {
 
   static async updateNotificationSettings(uid, key, value) {
     if (!uid) throw new Error("UID missing");
-    await db.collection('users').doc(uid).update({
-      [`notifications.${key}`]: value
-    });
+    await db.collection('users').doc(uid).update({ [`notifications.${key}`]: value });
   }
 
+  // --- GET NOTIFICATIONS ---
   static async getNotifications(uid) {
     if (!uid) return { notifications: [], unreadCount: 0 };
+    
     const snapshot = await db.collection('notifications')
-      .where('uid', '==', uid).orderBy('timestamp', 'desc').limit(10).get();
-
-    let notifications = [];
+      .where('recipientId', '==', uid)
+      .get();
+      
+    let notifications = []; 
     let unreadCount = 0;
-
+    
     snapshot.forEach(doc => {
       const data = doc.data();
       if (!data.isRead) unreadCount++;
-
+      
       let timeStr = "Just now";
-      if (data.timestamp) {
-          const dateObj = data.timestamp.toDate();
+      let rawTime = 0;
+      if (data.createdAt) {
+          const dateObj = data.createdAt.toDate();
+          rawTime = dateObj.getTime();
           timeStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       }
-
-      notifications.push({
-        id: doc.id,
-        title: data.title || "Update",
-        message: data.message || "",
-        isRead: data.isRead || false,
-        time: timeStr
+      
+      notifications.push({ 
+          id: doc.id, 
+          title: data.title || "Update", 
+          message: data.message || "", 
+          isRead: data.isRead || false, 
+          time: timeStr,
+          rawTime: rawTime,
+          link: data.link || '#'
       });
     });
 
-    if (notifications.length === 0) {
-      const mockNotif = {
-        uid: uid,
-        title: "Welcome to NexBA!",
-        message: "Your enterprise client dashboard is ready to use.",
-        isRead: false,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
-      };
-      const docRef = await db.collection('notifications').add(mockNotif);
-      notifications.push({ id: docRef.id, title: mockNotif.title, message: mockNotif.message, isRead: false, time: "Just now" });
-      unreadCount = 1;
-    }
-
-    return { notifications, unreadCount };
+    notifications.sort((a, b) => b.rawTime - a.rawTime);
+    
+    return { notifications: notifications.slice(0, 10), unreadCount };
   }
 
+  // --- MARK NOTIFICATIONS READ ---
   static async markNotificationsRead(uid) {
     if (!uid) return;
     const snapshot = await db.collection('notifications')
-      .where('uid', '==', uid).where('isRead', '==', false).get();
-
+      .where('recipientId', '==', uid)
+      .where('isRead', '==', false)
+      .get();
+      
+    if (snapshot.empty) return;
+    
     const batch = db.batch();
     snapshot.forEach(doc => batch.update(doc.ref, { isRead: true }));
     await batch.commit();

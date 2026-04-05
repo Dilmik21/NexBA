@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { auth } from "../firebase"; 
 import { signOut } from "firebase/auth";
-import { ArrowLeft, Loader2 } from "lucide-react"; // <-- Added Icons
+import { ArrowLeft, Loader2 } from "lucide-react"; 
 import logoDark from '../assets/logo-dark.png';
 
 export default function Login() {
@@ -16,7 +16,6 @@ export default function Login() {
   const { login } = useAuth(); 
   const navigate = useNavigate();
 
-  // Logic: On page load, check if an email was saved in localStorage
   useEffect(() => {
     const savedEmail = localStorage.getItem("nexba_remembered_email");
     if (savedEmail) {
@@ -31,7 +30,6 @@ export default function Login() {
       setError("");
       setLoading(true);
       
-      // Handle "Remember Me" logic
       if (rememberMe) {
         localStorage.setItem("nexba_remembered_email", email);
       } else {
@@ -40,21 +38,27 @@ export default function Login() {
 
       await login(email, password);
 
-      // --- THE VERIFICATION CHECK ---
       if (auth.currentUser && !auth.currentUser.emailVerified) {
-        // If they haven't verified, log them back out instantly to protect the app
         await signOut(auth);
         setError("Please verify your email before logging in. Check your inbox.");
         setLoading(false);
-        return; // Stops them from going to the dashboard
+        return; 
       }
 
       navigate("/dashboard"); 
     } catch (err) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        setError("Account not found. Please check your details or register below.");
+      // --- NEW: Clear, specific error notifications ---
+      console.error("Login Error:", err.code);
+      if (err.code === 'auth/user-not-found') {
+        setError("No account found with this email. Please register first.");
+      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError("Incorrect password. Please check your password and try again.");
+      } else if (err.code === 'auth/too-many-requests') {
+        setError("Too many failed attempts. Please try again later or reset your password.");
+      } else if (err.code === 'auth/invalid-email') {
+        setError("Please enter a valid email address.");
       } else {
-        setError("Failed to sign in. Please check your password.");
+        setError("Failed to sign in. Please try again.");
       }
     }
     setLoading(false);
@@ -63,7 +67,6 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EBF3FA] to-[#F5F7FA] flex flex-col items-center justify-center p-4 py-10 md:py-12 relative overflow-x-hidden">
       
-      {/* 1. BACK TO HOME BUTTON (Matches Register Page) */}
       <Link 
         to="/" 
         className="absolute top-6 left-4 md:top-8 md:left-8 flex items-center space-x-2 text-gray-500 hover:text-primary transition-colors font-medium text-xs md:text-sm group"
@@ -73,12 +76,10 @@ export default function Login() {
         <span className="sm:hidden">Back</span>
       </Link>
 
-      {/* 2. LOGO */}
       <Link to="/" className="mt-8 md:mt-0 mb-6 md:mb-8 hover:scale-105 transition-transform duration-300">
         <img src={logoDark} alt="NexBA Logo" className="h-8 md:h-10 w-auto" />
       </Link>
 
-      {/* 3. LOGIN CARD (Adjusted padding and border radius for mobile) */}
       <div className="bg-white w-full max-w-md rounded-3xl md:rounded-[2rem] p-6 sm:p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
         <h2 className="text-xl md:text-2xl font-bold text-navy mb-6 md:mb-8 text-center sm:text-left">Welcome back</h2>
 
@@ -91,7 +92,7 @@ export default function Login() {
               type="email"
               required
               value={email}
-              placeholder="you@company.com"
+              placeholder="Enter your email address"
               className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 px-4 py-3 md:py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:bg-white focus:border-blue-100 text-sm md:text-base"
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -102,7 +103,7 @@ export default function Login() {
             <input
               type="password"
               required
-              placeholder="••••••••"
+              placeholder="Enter your password"
               className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 px-4 py-3 md:py-3.5 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all border border-transparent focus:bg-white focus:border-blue-100 text-sm md:text-base"
               onChange={(e) => setPassword(e.target.value)}
             />

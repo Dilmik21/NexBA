@@ -1,5 +1,6 @@
 const { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BACommunicationHubModel, BACommunicationModel, BAProgressModel, BAUserModel } = require('../models/BAModels');
 const { db } = require('../config/firebase');
+const { sendNotification } = require('../services/notificationService');
 
 const requireBaId = (req, res, next) => {
   const baId = req.query.uid || req.body.uid;
@@ -27,6 +28,27 @@ const claimRequirement = async (req, res) => {
     const { id } = req.params;
     const { baName } = req.body;
     await BARequirementModel.claimRequirement(id, req.baId, baName || "Unknown BA");
+    
+    // --- 🚨 NOTIFICATION: Alert Client 🚨 ---
+    let clientId = null;
+    const reqSnap = await db.collection('requirements').where('reqId', '==', id).get();
+    if (!reqSnap.empty) {
+        clientId = reqSnap.docs[0].data().uid || reqSnap.docs[0].data().clientId;
+    } else {
+        const docRef = await db.collection('requirements').doc(id).get();
+        if (docRef.exists) clientId = docRef.data().uid || docRef.data().clientId;
+    }
+
+    if (clientId) {
+        await sendNotification({
+            recipientId: clientId,
+            title: "Project Claimed",
+            message: `${baName || "A Business Analyst"} has been assigned to your project and is beginning the analysis.`,
+            type: "System",
+            link: "/client/requests"
+        });
+    }
+
     res.json({ success: true, message: "Requirement claimed successfully" });
   } catch (error) { 
     if (error.message === "Not found") return res.status(404).json({ success: false, message: "Requirement not found" });
@@ -105,7 +127,7 @@ const processRequirementWithAI = async (req, res) => {
     const rawTextToProcess = reqData.description || reqData.text || "Empty requirement.";
     let aiProcessedData;
     try { 
-      const prompt = `You are a senior Business Analyst AI. Extract requirements from the text. IMPORTANT: Even if the input text is very brief or vague, you MUST extrapolate and generate plausible, industry-standard assumptions to fill ALL arrays (Business, Software, User Stories, etc.). Do not leave any array empty. Respond ONLY with a valid JSON object: {"summary": "...", "businessRequirements": ["..."], "softwareRequirements": ["..."], "userStories": ["..."], "acceptanceCriteria": ["..."], "riskFactors": ["..."], "ambiguousTerms": [{"term": "...", "suggestion": "..."}], "suggestedQuestions": ["..."]}`;
+      const prompt = `You are a senior Business Analyst AI. Extract requirements from the text. Respond ONLY with a valid JSON object.`;
       aiProcessedData = await callOpenAI(rawTextToProcess, prompt, 0.3); 
       aiProcessedData.processedText = rawTextToProcess;
     } catch (e) { 
@@ -125,24 +147,12 @@ const regenerateRequirementWithAI = async (req, res) => {
     
     const rawTextToProcess = reqDoc.data.description || reqDoc.data.text || "Empty requirement.";
     
-    const perspectives = [
-      "Security & Data Privacy",
-      "User Experience & Accessibility",
-      "Scalability & Performance",
-      "Payment Gateways & Integrations",
-      "Legal Compliance & Auditing",
-      "Mobile Responsiveness"
-    ];
+    const perspectives = ["Security & Data Privacy", "User Experience & Accessibility", "Scalability & Performance"];
     const randomPerspective = perspectives[Math.floor(Math.random() * perspectives.length)];
 
     let aiProcessedData;
     try { 
-      const prompt = `You are a highly creative senior Business Analyst AI. 
-      We are REGENERATING an analysis for this text. 
-      CRITICAL INSTRUCTION: You MUST analyze this project entirely through the lens of: "${randomPerspective}". 
-      Provide COMPLETELY NEW and UNIQUE user stories, risk factors, and especially DIFFERENT suggested clarification questions focused heavily on ${randomPerspective}. Do not repeat generic questions. Do not leave any array empty. 
-      Respond ONLY with a valid JSON object: {"summary": "...", "businessRequirements": ["..."], "softwareRequirements": ["..."], "userStories": ["..."], "acceptanceCriteria": ["..."], "riskFactors": ["..."], "ambiguousTerms": [{"term": "...", "suggestion": "..."}], "suggestedQuestions": ["..."]}`;
-      
+      const prompt = `You are a highly creative senior Business Analyst AI. REGENERATE analysis focusing on: "${randomPerspective}". Respond ONLY with a valid JSON object.`;
       aiProcessedData = await callOpenAI(rawTextToProcess, prompt, 1.0); 
       aiProcessedData.processedText = rawTextToProcess;
     } catch (e) { 
@@ -163,7 +173,24 @@ const saveEditedAIAnalysis = async (req, res) => {
 
 const sendClarificationQuestions = async (req, res) => {
   try {
-    await BACommunicationModel.sendClarificationQuestions(req.body.reqId, req.body.questions, req.baId, req.body.baName || "Your BA");
+    const baName = req.body.baName || "Your BA";
+    await BACommunicationModel.sendClarificationQuestions(req.body.reqId, req.body.questions, req.baId, baName);
+    
+    // --- 🚨 NOTIFICATION: Alert Client 🚨 ---
+    const reqSnap = await db.collection('requirements').where('reqId', '==', req.body.reqId).get();
+    if (!reqSnap.empty) {
+        const clientId = reqSnap.docs[0].data().uid || reqSnap.docs[0].data().clientId;
+        if (clientId) {
+            await sendNotification({
+                recipientId: clientId,
+                title: "Clarification Needed",
+                message: `Your Business Analyst has asked a few questions regarding project ${req.body.reqId}.`,
+                type: "Requirement",
+                link: "/client/clarifications"
+            });
+        }
+    }
+
     res.json({ success: true });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -181,10 +208,7 @@ const answerClarification = async (req, res) => {
     const { answer } = req.body;
     await BACommunicationModel.submitAnswer(id, answer); 
     res.json({ success: true, message: "Answer saved and status updated" });
-  } catch (error) { 
-    console.error("Answer submit error:", error);
-    res.status(500).json({ success: false }); 
-  }
+  } catch (error) { res.status(500).json({ success: false }); }
 };
 
 const getReadyRequirements = async (req, res) => {
@@ -209,23 +233,7 @@ const generateTasksWithAI = async (req, res) => {
 
     if (process.env.OPENAI_API_KEY && aiProcessedData) {
       try {
-        const prompt = `You are an expert Technical Project Manager. Break down these requirements into 4 to 8 specific technical tasks.
-        Summary: ${aiProcessedData.summary}. 
-        Features: ${aiProcessedData.softwareRequirements.join(". ")}. 
-        
-        CRITICAL INSTRUCTION 1: Accurately distribute the 'requiredRole'. Choose EXACTLY from: 'Front-end Developer', 'Back-end Developer', 'Full-stack Developer', 'Mobile App Developer', 'Game Developer', 'DevOps Engineer', 'Database Developer', 'AI/ML Developer'.
-        
-        CRITICAL INSTRUCTION 2: Determine the overall 'projectType'. Choose EXACTLY from: 'Web Development', 'Mobile Development', 'Desktop Development', 'Game Development', 'Embedded Systems Development', 'Cloud Development', 'DevOps Development', 'AI / Machine Learning Development', 'Data Science Development', 'Cybersecurity Development'.
-        
-        Respond ONLY with a JSON object matching this format: 
-        {
-          "projectType": "Web Development",
-          "tasks": [
-            {"title": "Design interactive UI components", "priority": "Medium", "requiredRole": "Front-end Developer"},
-            {"title": "Build secure payment API", "priority": "High", "requiredRole": "Back-end Developer"}
-          ]
-        }`;
-        
+        const prompt = `You are an expert Technical Project Manager. Break down these requirements into technical tasks. Respond ONLY with a JSON object.`;
         aiResponse = await callOpenAI("Generate technical tasks.", prompt, 0.7); 
       } catch(e) { console.error("AI Task Generation Failed:", e); }
     } 
@@ -234,9 +242,8 @@ const generateTasksWithAI = async (req, res) => {
       aiResponse = {
         projectType: "Web Development",
         tasks: [
-          { title: "Design database schema for new features", priority: "High", requiredRole: "Database Developer" },
-          { title: "Implement core API functionality", priority: "High", requiredRole: "Back-end Developer" },
-          { title: "Build responsive frontend UI", priority: "Medium", requiredRole: "Front-end Developer" }
+          { title: "Design database schema", priority: "High", requiredRole: "Database Developer" },
+          { title: "Implement core API", priority: "High", requiredRole: "Back-end Developer" }
         ]
       };
     }
@@ -250,12 +257,6 @@ const generateTasksWithAI = async (req, res) => {
        t.displayId = t.taskId;
        allTasks.push(t);
     });
-    
-    allTasks.sort((a, b) => {
-        const numA = parseInt(a.taskId.split('-').pop(), 10) || 0;
-        const numB = parseInt(b.taskId.split('-').pop(), 10) || 0;
-        return numA - numB;
-    });
 
     res.json({ success: true, data: allTasks, projectType: aiResponse.projectType });
   } catch (error) { res.status(500).json({ success: false }); }
@@ -268,7 +269,19 @@ const saveAssignedTasks = async (req, res) => {
       res.json({ success: true, message: "Manual task added to queue." });
     } else {
       await BATaskModel.sendToEngineeringTeam(req.body.reqId, req.body.leaderId, req.body.leaderName);
-      res.json({ success: true, message: "Tasks forwarded to Team Leader successfully" });
+      
+      // --- 🚨 NOTIFICATION: Alert Developer 🚨 ---
+      if (req.body.leaderId) {
+          await sendNotification({
+              recipientId: req.body.leaderId,
+              title: "New Project Assigned",
+              message: `You have been assigned as the Team Leader for requirement ${req.body.reqId}.`,
+              type: "Task",
+              link: "/dev/tasks"
+          });
+      }
+
+      res.json({ success: true, message: "Tasks forwarded successfully" });
     }
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -287,6 +300,17 @@ const removeTaskFromQueue = async (req, res) => {
 const sendToEngineering = async (req, res) => {
   try {
     await BATaskModel.sendToEngineeringTeam(req.body.reqId, req.body.leaderId, req.body.leaderName);
+    
+    if (req.body.leaderId) {
+        await sendNotification({
+            recipientId: req.body.leaderId,
+            title: "New Tasks Assigned",
+            message: `You have new tasks pending for requirement ${req.body.reqId}.`,
+            type: "Task",
+            link: "/dev/tasks"
+        });
+    }
+
     res.json({ success: true, message: "Successfully sent to engineering team" });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -301,6 +325,26 @@ const getChangeRequests = async (req, res) => {
 const updateChangeStatus = async (req, res) => {
   try {
     const updatedCR = await BAChangeModel.updateChangeStatus(req.params.crId, req.body.status);
+
+    let clientId = null;
+    const crSnap = await db.collection('change_requests').where('crId', '==', req.params.crId).get();
+    if (!crSnap.empty) {
+        clientId = crSnap.docs[0].data().uid || crSnap.docs[0].data().clientId;
+    } else {
+        const docRef = await db.collection('change_requests').doc(req.params.crId).get();
+        if (docRef.exists) clientId = docRef.data().uid || docRef.data().clientId;
+    }
+
+    if (clientId) {
+        await sendNotification({
+            recipientId: clientId,
+            title: "Change Request Updated",
+            message: `Your change request has been reviewed. Its status is now: ${req.body.status}.`,
+            type: "Change Request",
+            link: "/client/requests" 
+        });
+    }
+
     res.json({ success: true, data: updatedCR });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -314,14 +358,51 @@ const getVerificationTasks = async (req, res) => {
 
 const approveTaskVerification = async (req, res) => {
   try {
-    await BAVerificationModel.approveTask(req.params.taskId);
+    const frontendId = req.params.taskId; 
+    await BAVerificationModel.approveTask(frontendId);
+
+    const reqSnap = await db.collection('requirements').where('reqId', '==', frontendId).get();
+    if (!reqSnap.empty) {
+        const clientId = reqSnap.docs[0].data().uid || reqSnap.docs[0].data().clientId;
+        if (clientId) {
+            await sendNotification({
+                recipientId: clientId,
+                title: "Feature Ready for UAT",
+                message: `A task for project ${frontendId} has passed internal testing and is ready for your approval.`,
+                type: "Approval",
+                link: "/client/approvals"
+            });
+        }
+    }
+
     res.json({ success: true, message: "Task approved and sent to client UAT" });
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+// --- 🚨 FIXED: FIND DEV DIRECTLY FROM REQUIREMENT 🚨 ---
 const rejectTaskVerification = async (req, res) => {
   try {
-    await BAVerificationModel.rejectTask(req.params.taskId, req.body.reason);
+    const frontendId = req.params.taskId; 
+    await BAVerificationModel.rejectTask(frontendId, req.body.reason);
+    
+    // Look up the requirement to find the dev reliably
+    const reqSnap = await db.collection('requirements').where('reqId', '==', frontendId).get();
+    
+    if (!reqSnap.empty) {
+        const reqData = reqSnap.docs[0].data();
+        const developerId = reqData.teamLeaderId || reqData.developerId;
+        
+        if (developerId) {
+            await sendNotification({
+                recipientId: developerId,
+                title: "Task Verification Rejected",
+                message: `Your evidence for project ${frontendId} was rejected by the BA. Reason: ${req.body.reason}`,
+                type: "Task",
+                link: "/dev/evidence"
+            });
+        }
+    }
+
     res.json({ success: true, message: "Task rejected and returned to developer" });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -341,11 +422,47 @@ const getChatMessages = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+// --- 🚨 FIXED: RELIABLY NOTIFY DEVELOPER FROM CHAT 🚨 ---
 const sendChatMessage = async (req, res) => {
   try {
     const { reqId, channel } = req.params;
     const { text, fileData, senderName } = req.body;
+    
     const newMsg = await BACommunicationHubModel.sendMessage(reqId, req.baId, senderName, channel, text, fileData);
+
+    const channelName = channel.toLowerCase();
+
+    const reqSnap = await db.collection('requirements').where('reqId', '==', reqId).get();
+    if (!reqSnap.empty) {
+        const reqData = reqSnap.docs[0].data();
+        
+        if (channelName === 'client') {
+            const clientId = reqData.uid || reqData.clientId;
+            if (clientId) {
+                await sendNotification({
+                    recipientId: clientId,
+                    title: "New Message from BA",
+                    message: `${senderName || "Your BA"} sent you a message regarding project ${reqId}.`,
+                    type: "Communication",
+                    link: "/client/messages"
+                });
+            }
+        } 
+        else if (channelName === 'developer' || channelName === 'internal') {
+             // Extract dev ID directly from the requirement doc, bypass tasks!
+             const developerId = reqData.teamLeaderId || reqData.developerId;
+             if (developerId) {
+                 await sendNotification({
+                     recipientId: developerId,
+                     title: "New Message from BA",
+                     message: `${senderName || "Your BA"} sent a message regarding project ${reqId}.`,
+                     type: "Communication",
+                     link: "/dev/communication"
+                 });
+             }
+        }
+    }
+
     res.json({ success: true, data: newMsg });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -365,7 +482,6 @@ const getProgressAndReports = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- NEW: SETTINGS CONTROLLERS ---
 const getSettings = async (req, res) => {
   try {
     const data = await BAUserModel.getSettings(req.baId);
@@ -405,5 +521,5 @@ module.exports = {
   getVerificationTasks, approveTaskVerification, rejectTaskVerification,
   getChatRequirements, getChatMessages, sendChatMessage, markMessagesRead,
   getProgressAndReports,
-  getSettings, updateGeneralSettings, updateSecuritySettings, updateNotificationSettings // <-- Exported here
+  getSettings, updateGeneralSettings, updateSecuritySettings, updateNotificationSettings 
 };

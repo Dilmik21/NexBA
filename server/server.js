@@ -16,11 +16,13 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const clientRoutes = require('./routes/clientRoutes');
 const sharedRoutes = require('./routes/sharedRoutes');
 const baRoutes = require('./routes/baRoutes'); 
+const devRoutes = require('./routes/devRoutes'); // <-- NEW: Imported Developer Routes
 
 // Mount Routes
 app.use('/api/client', clientRoutes);
 app.use('/api/ai', sharedRoutes);
 app.use('/api/ba', baRoutes); 
+app.use('/api/dev', devRoutes); // <-- NEW: Mounted Developer Routes
 
 // Start Server
 app.listen(port, () => {

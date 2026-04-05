@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
+// 🚨 FIXED: Ensure case sensitivity matches your file name
+const baController = require('../controllers/baController'); 
+
 const { 
   requireBaId,
   getDashboardOverview,
@@ -30,11 +33,11 @@ const {
   sendChatMessage,     
   markMessagesRead,
   getProgressAndReports,
-  getSettings,                // <-- NEW
-  updateGeneralSettings,      // <-- NEW
-  updateSecuritySettings,     // <-- NEW
-  updateNotificationSettings  // <-- NEW
-} = require('../controllers/baController');
+  getSettings,                
+  updateGeneralSettings,      
+  updateSecuritySettings,     
+  updateNotificationSettings  
+} = baController;
 
 router.get('/overview', requireBaId, getDashboardOverview);
 router.get('/search', requireBaId, searchAllItems);
@@ -70,7 +73,7 @@ router.put('/chat/:reqId/:channel/read', requireBaId, markMessagesRead);
 
 router.get('/progress', requireBaId, getProgressAndReports);
 
-// --- NEW ROUTES: Settings ---
+// --- Profile & Settings ---
 router.get('/settings', requireBaId, getSettings);
 router.put('/settings/general', requireBaId, updateGeneralSettings);
 router.put('/settings/security', requireBaId, updateSecuritySettings);

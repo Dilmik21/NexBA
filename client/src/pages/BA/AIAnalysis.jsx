@@ -90,6 +90,9 @@ export default function AIAnalysis() {
   const [historyList, setHistoryList] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  // --- NEW: Identify Completed Statuses ---
+  const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
+
   const fetchClarifications = async () => {
     if (!currentUser?.uid || !reqId) return [];
     setIsRefreshingAns(true);
@@ -111,8 +114,6 @@ export default function AIAnalysis() {
   const processAI = async (id, isSilent = false) => {
     if (!id || !currentUser?.uid) return;
     
-    // MAXIMUM SPEED: Only show the loading screen on the very first page load.
-    // If you are just switching requirements in the dropdown, it swaps instantly!
     if (!aiData && !isSilent) {
       setIsLoading(true);
     }
@@ -139,7 +140,7 @@ export default function AIAnalysis() {
     } catch (error) {
       console.error("AI Fetch Error:", error);
     } finally {
-      setIsLoading(false); // Always hide loader when done
+      setIsLoading(false);
     }
   };
 
@@ -260,6 +261,15 @@ export default function AIAnalysis() {
   const displayTitle = getSafeValue(reqDetails?.title, 'Untitled Requirement');
   const displayDesc = getSafeValue(aiData?.processedText, getSafeValue(reqDetails?.description, getSafeValue(reqDetails?.text, null)));
 
+  // --- NEW: Sort History so Completed are at the bottom ---
+  const sortedHistory = [...historyList].sort((a, b) => {
+    const aFinished = finishedStatuses.includes(a.status);
+    const bFinished = finishedStatuses.includes(b.status);
+    if (aFinished && !bFinished) return 1;
+    if (!aFinished && bFinished) return -1;
+    return a.id.localeCompare(b.id);
+  });
+
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
       <BATopBar />
@@ -286,12 +296,27 @@ export default function AIAnalysis() {
                 <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
                    <div className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50 mb-1">Analysis History</div>
                    <div className="max-h-[300px] overflow-y-auto">
-                    {historyList.map(item => (
-                      <div key={item.id} onClick={() => { setIsDropdownOpen(false); navigate(`/ba/analysis?reqId=${item.id}`); }} className={`px-5 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-l-[4px] ${item.id === reqId ? 'border-primary bg-blue-50/30' : 'border-transparent'}`}>
-                        <p className={`text-sm font-bold ${item.id === reqId ? 'text-primary' : 'text-navy'}`}>{item.id}</p>
-                        <p className="text-xs text-gray-400 truncate mt-0.5">{getSafeValue(item.title, 'Untitled')}</p>
-                      </div>
-                    ))}
+                    {sortedHistory.map(item => {
+                      const isCompleted = finishedStatuses.includes(item.status);
+                      return (
+                        <div 
+                          key={item.id} 
+                          onClick={() => { setIsDropdownOpen(false); navigate(`/ba/analysis?reqId=${item.id}`); }} 
+                          className={`px-5 py-3 hover:bg-blue-50 cursor-pointer transition-colors border-l-[4px] ${item.id === reqId ? 'border-primary bg-blue-50/30' : 'border-transparent'}`}
+                        >
+                          <div className="flex justify-between items-start mb-0.5">
+                            <p className={`text-sm font-bold ${item.id === reqId ? 'text-primary' : 'text-navy'}`}>{item.id}</p>
+                            {/* --- COMPLETED BADGE --- */}
+                            {isCompleted && (
+                              <span className="bg-green-50 text-green-600 border border-green-200 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                Completed
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 truncate mt-0.5">{getSafeValue(item.title, 'Untitled')}</p>
+                        </div>
+                      );
+                    })}
                    </div>
                 </div>
               )}
@@ -310,7 +335,6 @@ export default function AIAnalysis() {
                 <h3 className="text-xl font-bold text-navy mb-2">Ready to Analyze</h3>
                 <p className="text-sm text-gray-400 max-w-sm mb-8">Please select a requirement from the history or inbox to start.</p>
                 
-                {/* --- ADDED: Button to go to Requirement Inbox --- */}
                 <button 
                   onClick={() => navigate('/ba/inbox')}
                   className="bg-primary hover:bg-blue-600 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-sm flex items-center"

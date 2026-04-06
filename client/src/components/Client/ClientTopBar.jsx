@@ -36,23 +36,17 @@ export default function ClientTopBar() {
 
   const getStageStyle = (stage) => {
     const s = stage?.toLowerCase() || "";
-    
-    if (s.includes("pending") || s.includes("review")) 
-      return "bg-orange-50 text-orange-600 ring-1 ring-orange-500/20";
-    if (s.includes("analysis")) 
-      return "bg-yellow-50 text-yellow-600 ring-1 ring-yellow-500/20";
-    if (s.includes("clarification")) 
-      return "bg-red-50 text-red-600 ring-1 ring-red-500/20";
-    if (s.includes("develop")) 
-      return "bg-blue-50 text-blue-600 ring-1 ring-blue-500/20";
-    if (s.includes("uat")) 
-      return "bg-purple-50 text-purple-600 ring-1 ring-purple-500/20";
-    if (s.includes("change") || s.includes("modification")) 
-      return "bg-amber-50 text-amber-600 ring-1 ring-amber-500/20";
-    if (s.includes("live") || s.includes("complete") || s.includes("approved")) 
-      return "bg-green-50 text-green-600 ring-1 ring-green-500/20";
-      
-    return "bg-gray-50 text-gray-500 ring-1 ring-gray-500/20";
+    if (s === "pending ba review") return "bg-gray-100 text-gray-600 ring-1 ring-gray-200";
+    if (s.includes("analysis")) return "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200";
+    if (s.includes("clarification")) return "bg-red-50 text-red-600 ring-1 ring-red-200";
+    if (s.includes("sent to engineering")) return "bg-blue-50 text-blue-500 ring-1 ring-blue-200";
+    if (s.includes("in progress")) return "bg-blue-100 text-blue-700 ring-1 ring-blue-300";
+    if (s.includes("ready for review")) return "bg-teal-50 text-teal-700 ring-1 ring-teal-200";
+    if (s.includes("pending verification") || s.includes("awaiting verification")) return "bg-purple-50 text-purple-700 ring-1 ring-purple-200";
+    if (s.includes("change requested") || s.includes("modification requested")) return "bg-orange-50 text-orange-600 ring-1 ring-orange-200";
+    if (s.includes("uat") || s.includes("pending approval")) return "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200";
+    if (s.includes("complete") || s.includes("done") || s.includes("approved") || s.includes("live")) return "bg-green-50 text-green-700 ring-1 ring-green-200";
+    return "bg-gray-50 text-gray-500 ring-1 ring-gray-200";
   };
 
   useEffect(() => {
@@ -64,7 +58,6 @@ export default function ClientTopBar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- REAL-TIME FIRESTORE NOTIFICATIONS (INDEX-FREE VERSION) ---
   useEffect(() => {
     if (!currentUser?.uid) return;
 
@@ -85,7 +78,6 @@ export default function ClientTopBar() {
 
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        
         let timeString = "Just now";
         let rawTime = 0;
 
@@ -108,13 +100,11 @@ export default function ClientTopBar() {
         if (data.isRead === false) unread++;
       });
 
-      // Sort natively in JS to bypass Firebase limits
       fetchedNotifs.sort((a, b) => b.rawTime - a.rawTime);
-
       setNotifications(fetchedNotifs);
       setUnreadCount(unread);
     }, (error) => {
-      console.error("Error fetching real-time notifications:", error);
+      console.error("Error fetching notifications:", error);
     });
 
     return () => unsubscribe();
@@ -123,17 +113,14 @@ export default function ClientTopBar() {
   const handleMarkAllRead = async () => {
     try {
       const batch = writeBatch(db);
-      
       notifications.forEach(notif => {
         if (!notif.isRead) {
           const notifRefDoc = doc(db, "notifications", notif.id);
           batch.update(notifRefDoc, { isRead: true });
         }
       });
-
       setUnreadCount(0);
       await batch.commit();
-
     } catch (error) {
       console.error("Failed to mark as read", error);
     }
@@ -171,6 +158,17 @@ export default function ClientTopBar() {
     }
   };
 
+  // --- NEW: Handle clicking a search result ---
+  const handleResultClick = (reqId) => {
+    // 1. Clear the search bar
+    setSearchResults(null);
+    setSearchTerm("");
+    setIsSearching(false);
+    
+    // 2. Navigate to My Requests and pass the ID in the background state
+    navigate('/client/requests', { state: { highlightReqId: reqId } });
+  };
+
   const handleBellClick = () => {
     setIsNotifOpen(!isNotifOpen);
     setIsProfileOpen(false); 
@@ -206,7 +204,7 @@ export default function ClientTopBar() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleSearch} 
-              placeholder="Search by ID (e.g., REQ-1001) or Title and press Enter..." 
+              placeholder="Search requirements..." 
               className="w-full bg-[#F7F9FC] text-navy placeholder-gray-400 pl-12 pr-10 py-3 rounded-xl outline-none focus:ring-2 focus:ring-[#007BFF]/20 focus:bg-white transition-all border border-transparent focus:border-blue-100"
             />
             {isSearching && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#007BFF] animate-spin" />}
@@ -229,7 +227,11 @@ export default function ClientTopBar() {
                 <p className="text-sm text-gray-500 p-4 text-center">No requirements match your search.</p>
               ) : (
                 searchResults.map((req, index) => (
-                  <div key={index} className="p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors mb-1 border border-transparent hover:border-gray-100 flex items-center justify-between group">
+                  <div 
+                    key={index} 
+                    onClick={() => handleResultClick(req.id)} // NEW CLICK HANDLER
+                    className="p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors mb-1 border border-transparent hover:border-gray-100 flex items-center justify-between group"
+                  >
                     <div className="flex-1 min-w-0 pr-4">
                       <div className="flex items-center space-x-2">
                         <span className="font-bold text-sm text-[#007BFF]">{req.id}</span>
@@ -248,7 +250,6 @@ export default function ClientTopBar() {
 
         <div className="flex items-center space-x-2 md:space-x-6 flex-shrink-0">
           
-          {/* Notification Dropdown */}
           <div className="relative" ref={notifRef}>
             <button 
               className={`relative p-2.5 text-gray-500 hover:text-navy transition-colors rounded-full focus:outline-none ${isNotifOpen ? 'bg-blue-50 text-[#007BFF]' : 'hover:bg-gray-50'}`} 
@@ -306,7 +307,6 @@ export default function ClientTopBar() {
             )}
           </div>
 
-          {/* Profile Dropdown */}
           <div className="relative" ref={profileRef}>
             <button 
               onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }} 

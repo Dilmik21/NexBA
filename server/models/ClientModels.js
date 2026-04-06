@@ -13,6 +13,9 @@ const getTimeAgo = (timestamp) => {
   return "Just now";
 };
 
+// Centralized array for statuses that mean a project is 100% finished
+const finishedStatuses = ['Completed', 'Done', 'Approved & Live', 'Live', 'Closed'];
+
 class RequirementModel {
   static async submitProject(projectData, uid) {
     const safeUid = uid || projectData.uid || "GUEST_USER";
@@ -111,15 +114,39 @@ class RequirementModel {
   static async getOverviewStats(uid) {
     const safeUid = uid || "INVALID";
     const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
-    let stats = { totalActive: 0, pendingApprovals: 0, inAnalysis: 0, clarificationsNeeded: 0 };
+    
+    let stats = { 
+      totalActive: 0, 
+      pendingApprovals: 0, 
+      inAnalysis: 0, 
+      clarificationsNeeded: 0 
+    };
 
     snapshot.forEach(doc => {
       const data = doc.data();
-      stats.totalActive++; 
-      if (data.status === "Client UAT" || data.status === "Modification Requested" || data.status === "Change Requested") stats.pendingApprovals++;
-      if (data.status === "In Analysis" || data.status === "Tasks Assigned") stats.inAnalysis++;
-      if (data.status === "Clarification Needed") stats.clarificationsNeeded++;
+      const status = data.status || 'Pending BA Review';
+
+      // 1. Total Active (Excludes anything in the finished list)
+      if (!finishedStatuses.includes(status)) {
+        stats.totalActive++; 
+      }
+
+      // 2. Pending Approvals (Waiting for the Client)
+      if (status === "Client UAT" || status === "Modification Requested" || status === "Change Requested") {
+        stats.pendingApprovals++;
+      }
+
+      // 3. In Analysis (On the BA's desk)
+      if (status === "Pending BA Review" || status === "In Analysis" || status === "Tasks Assigned") {
+        stats.inAnalysis++;
+      }
+
+      // 4. Clarifications Needed (Blocked, waiting for Client)
+      if (status === "Clarification Needed") {
+        stats.clarificationsNeeded++;
+      }
     });
+
     return stats;
   }
 
@@ -127,12 +154,15 @@ class RequirementModel {
     const safeUid = uid || "INVALID";
     const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     let requirementsList = [];
+
     snapshot.forEach(doc => {
       const data = doc.data();
+      const status = data.status || 'Pending BA Review';
+      
       requirementsList.push({
         id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, 
         title: data.title,
-        stage: data.status,
+        stage: status,
         progress: data.progress || 0,
         rawDate: data.submittedAt || 0
       });
@@ -142,22 +172,38 @@ class RequirementModel {
     return requirementsList.slice(0, 5);
   }
 
+  // --- 🚨 FIXED: Filter out Change Requests for Completed Projects ---
   static async getChangeRequests(uid) {
     const safeUid = uid || "INVALID";
+    
+    // First, map which projects are actually still alive
+    const reqsSnapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
+    const activeReqIds = new Set();
+    reqsSnapshot.forEach(doc => {
+      if (!finishedStatuses.includes(doc.data().status)) {
+        activeReqIds.add(doc.data().reqId);
+      }
+    });
+
     const snapshot = await db.collection('change_requests')
       .where('uid', '==', safeUid) 
       .where('status', '!=', 'Resolved').get();
+      
     let requests = [];
     snapshot.forEach(doc => {
       const data = doc.data();
-      requests.push({
-        id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
-        title: `"${data.title || 'Untitled Update'}"`,
-        type: data.type || "Scope Change",
-        date: "Submitted recently",
-        status: data.impactStatus || "Analyzing Impact...",
-        statusColor: data.riskLevel === 'High' ? 'red' : 'yellow'
-      });
+      
+      // ONLY show the change request if the parent project is still active
+      if (activeReqIds.has(data.reqId)) {
+        requests.push({
+          id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
+          title: `"${data.title || 'Untitled Update'}"`,
+          type: data.type || "Scope Change",
+          date: "Submitted recently",
+          status: data.impactStatus || "Analyzing Impact...",
+          statusColor: data.riskLevel === 'High' ? 'red' : 'yellow'
+        });
+      }
     });
     return requests;
   }
@@ -384,12 +430,11 @@ class RequirementModel {
     const snapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     
     let archives = [];
-    const archivedStatuses = ['Approved & Live', 'Closed — Superseded', 'Approved', 'Completed'];
     
     snapshot.forEach(doc => {
       const data = doc.data();
       
-      if (archivedStatuses.includes(data.status)) {
+      if (finishedStatuses.includes(data.status) || data.status === 'Closed — Superseded') {
           let submittedDate = "Unknown";
           let completedDate = "Recently";
           let rawDate = 0;
@@ -427,13 +472,18 @@ class RequirementModel {
 }
 
 class CommunicationModel {
+  // --- 🚨 FIXED: Filter out Clarifications for Completed Projects ---
   static async getClarifications(uid) {
     const safeUid = uid || "INVALID";
     const reqsSnapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     const requirementsMap = {};
+    
     reqsSnapshot.forEach(doc => {
       const data = doc.data();
-      requirementsMap[data.reqId] = data;
+      // ONLY map projects that are NOT finished
+      if (!finishedStatuses.includes(data.status)) {
+        requirementsMap[data.reqId] = data;
+      }
     });
 
     const snapshot = await db.collection('clarifications').get();
@@ -443,6 +493,7 @@ class CommunicationModel {
       const data = doc.data();
       const reqId = data.reqId || "Unknown";
       
+      // If the requirement is not in the map, it means it's finished. Skip it!
       if (requirementsMap[reqId]) {
         const parentReq = requirementsMap[reqId];
         let priority = parentReq.priority || parentReq.riskLevel || "Medium";
@@ -636,7 +687,6 @@ class UserModel {
     await db.collection('users').doc(uid).update({ [`notifications.${key}`]: value });
   }
 
-  // --- GET NOTIFICATIONS ---
   static async getNotifications(uid) {
     if (!uid) return { notifications: [], unreadCount: 0 };
     
@@ -675,7 +725,6 @@ class UserModel {
     return { notifications: notifications.slice(0, 10), unreadCount };
   }
 
-  // --- MARK NOTIFICATIONS READ ---
   static async markNotificationsRead(uid) {
     if (!uid) return;
     const snapshot = await db.collection('notifications')

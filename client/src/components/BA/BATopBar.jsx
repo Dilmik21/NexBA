@@ -45,7 +45,6 @@ export default function BATopBar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- REAL-TIME FIRESTORE NOTIFICATIONS (INDEX-FREE VERSION) ---
   useEffect(() => {
     if (!currentUser?.uid) return;
 
@@ -55,7 +54,6 @@ export default function BATopBar() {
       return;
     }
 
-    // FIX: Removed orderBy to bypass Firebase index requirements
     const q = query(
       collection(db, "notifications"),
       where("recipientId", "==", currentUser.uid)
@@ -91,7 +89,6 @@ export default function BATopBar() {
         if (data.isRead === false) unread++;
       });
 
-      // FIX: Sort the notifications in JavaScript instead of Firebase
       fetchedNotifs.sort((a, b) => b.rawTime - a.rawTime);
 
       setNotifications(fetchedNotifs);
@@ -151,6 +148,16 @@ export default function BATopBar() {
         setIsSearching(false);
       }
     }
+  };
+
+  // --- NEW: Click handler to navigate to AI Analysis ---
+  const handleResultClick = (reqId) => {
+    setSearchResults(null);
+    setSearchTerm("");
+    setIsSearching(false);
+    
+    // Navigates directly to the AI Analysis page with the requirement ID loaded!
+    navigate(`/ba/analysis?reqId=${reqId}`);
   };
 
   const handleBellClick = () => {
@@ -222,7 +229,11 @@ export default function BATopBar() {
                 <p className="text-sm text-gray-500 p-4 text-center">No results match your search.</p>
               ) : (
                 searchResults.map((item, index) => (
-                  <div key={index} className="p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors mb-1 border border-transparent hover:border-gray-100 flex items-center justify-between group">
+                  <div 
+                    key={index} 
+                    onClick={() => handleResultClick(item.id)} // --- TRIGGER NAVIGATION HERE ---
+                    className="p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors mb-1 border border-transparent hover:border-gray-100 flex items-center justify-between group"
+                  >
                     <div className="flex-1 min-w-0 pr-4">
                       <div className="flex items-center space-x-2">
                         <span className={`font-bold text-sm ${item.type === 'Task' ? 'text-purple-600' : 'text-[#007BFF]'}`}>

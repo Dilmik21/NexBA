@@ -10,7 +10,7 @@ export default function BAOverview() {
   
   const [data, setData] = useState({
     stats: { pendingReviews: 0, verificationQueue: 0, criticalRisks: 0, activeRequirements: 0 },
-    inbox: [], changeRequests: [], developerLoad: [], verificationQueue: [], developerUpdates: []
+    inbox: [], changeRequests: [], developerLoad: [], verificationQueue: []
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -34,6 +34,25 @@ export default function BAOverview() {
 
   const firstName = userData?.fullName?.split(" ")[0] || "BA";
 
+  const getDevLoadStyle = (count) => {
+    let color = "bg-[#10B981]"; 
+    let textColor = "text-white";
+    
+    if (count >= 8) { 
+      color = "bg-red-500"; 
+    } else if (count >= 4) { 
+      color = "bg-yellow-500"; 
+    }
+    
+    const widthPercent = Math.min((count / 10) * 100, 100); 
+    const finalWidth = widthPercent < 5 ? 5 : widthPercent; 
+    
+    return { color, textColor, widthPercent: finalWidth };
+  };
+
+  // --- FIXED: Strictly filter to ONLY show "Pending BA Review" (Unclaimed) items ---
+  const unclaimedInbox = data.inbox.filter(item => item.isNew);
+
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
       <BATopBar />
@@ -51,7 +70,7 @@ export default function BAOverview() {
             <p className="text-gray-500 mt-1 text-[13px] md:text-sm">Good morning, {firstName}. Here's your command center overview.</p>
           </div>
 
-          {/* 4 STAT CARDS - 2x2 grid on mobile, 4x1 on desktop */}
+          {/* 4 STAT CARDS */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-6">
             <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-sm flex flex-col">
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mb-2 md:mb-4"><Inbox className="w-4 h-4 md:w-5 md:h-5" /></div>
@@ -71,7 +90,7 @@ export default function BAOverview() {
             <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 shadow-sm flex flex-col">
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-green-50 text-green-500 flex items-center justify-center mb-2 md:mb-4"><FileText className="w-4 h-4 md:w-5 md:h-5" /></div>
               <h2 className="text-2xl md:text-4xl font-black text-navy">{isLoading ? <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin text-gray-300" /> : data.stats.activeRequirements}</h2>
-              <p className="text-[11px] md:text-sm font-medium text-gray-500 mt-1 truncate">Active Reqs</p>
+              <p className="text-[11px] md:text-sm font-medium text-gray-500 mt-1 truncate">Active Requirement</p>
             </div>
           </div>
 
@@ -94,10 +113,10 @@ export default function BAOverview() {
             <div className="divide-y divide-gray-50">
               {isLoading ? (
                 <div className="px-6 py-8 text-center text-gray-500 text-sm flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Syncing...</div>
-              ) : data.inbox.length === 0 ? (
+              ) : unclaimedInbox.length === 0 ? (
                 <div className="px-6 py-8 text-center text-gray-500 text-[13px] md:text-sm">You're all caught up! No pending requirements in the requirement inbox.</div>
               ) : (
-                data.inbox.map((item, i) => (
+                unclaimedInbox.map((item, i) => (
                   <div key={i} className="px-4 py-3 md:px-6 md:py-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition-colors">
                     <div className="flex items-start space-x-3 md:space-x-4 min-w-0 pr-4">
                       {item.isNew ? (
@@ -169,19 +188,25 @@ export default function BAOverview() {
               {isLoading ? (
                 <div className="text-center text-gray-500 text-sm flex items-center justify-center py-4"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Syncing loads...</div>
               ) : (
-                data.developerLoad.map((dev, i) => (
-                  <div key={i} className="flex items-center text-xs md:text-sm">
-                    <div className="w-24 md:w-40 text-gray-600 font-medium truncate pr-2 md:pr-4">{dev.name}</div>
-                    <div className="flex-1 h-5 md:h-6 bg-gray-50 rounded-md overflow-hidden relative">
-                      <div 
-                        className={`h-full ${dev.color} rounded-md flex items-center justify-end px-2 md:px-3 transition-all duration-500`}
-                        style={{ width: `${dev.widthPercent}%` }}
-                      >
-                        <span className={`text-[10px] md:text-xs font-bold ${dev.textColor}`}>{dev.count}</span>
+                data.developerLoad.map((dev, i) => {
+                  const { color, textColor, widthPercent } = getDevLoadStyle(dev.count || 0);
+                  
+                  return (
+                    <div key={i} className="flex items-center text-xs md:text-sm">
+                      <div className="w-24 md:w-40 text-gray-600 font-medium truncate pr-2 md:pr-4">{dev.name}</div>
+                      <div className="flex-1 h-5 md:h-6 bg-gray-50 rounded-md overflow-hidden relative">
+                        <div 
+                          className={`h-full ${color} rounded-md flex items-center justify-end px-2 md:px-3 transition-all duration-500`}
+                          style={{ width: `${widthPercent}%` }}
+                        >
+                          <span className={`text-[10px] md:text-xs font-bold ${textColor}`}>
+                            {dev.count}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -226,49 +251,6 @@ export default function BAOverview() {
               <Link to="/ba/reports" className="bg-white border border-gray-200 hover:border-primary hover:text-primary hover:bg-blue-50 transition-all text-gray-600 font-semibold p-4 rounded-xl md:rounded-2xl flex items-center text-[13px] md:text-sm shadow-sm">
                 <ClipboardCheck className="w-4 h-4 md:w-5 md:h-5 mr-3 text-orange-500" /> Client Status
               </Link>
-            </div>
-          </div>
-
-          {/* DEVELOPER UPDATES */}
-          <div className="bg-white rounded-2xl md:rounded-3xl border-l-4 border-green-500 shadow-sm overflow-hidden border-y border-r border-gray-100 mt-2">
-            <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-50 flex justify-between items-center bg-green-50/30">
-              <div className="flex items-center space-x-2 md:space-x-3">
-                <MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
-                <h3 className="font-bold text-navy text-[13px] md:text-base">Developer Updates</h3>
-                {!isLoading && data.developerUpdates.length > 0 && (
-                  <span className="hidden sm:inline-block bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                    {data.developerUpdates.length} new
-                  </span>
-                )}
-              </div>
-              <Link to="/ba/communication" className="text-xs md:text-sm font-bold text-primary flex items-center hover:underline whitespace-nowrap">
-                Open Hub <ArrowRight className="w-3 h-3 md:w-4 md:h-4 ml-1"/>
-              </Link>
-            </div>
-            <div className="divide-y divide-gray-50">
-              {isLoading ? (
-                <div className="px-6 py-8 text-center text-gray-500 text-sm flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Syncing...</div>
-              ) : data.developerUpdates.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-500 text-[13px] md:text-sm">No new developer updates right now.</div>
-              ) : (
-                data.developerUpdates.map((update, i) => (
-                  <div key={i} className="px-4 py-3 md:px-6 md:py-4 flex items-start space-x-3 md:space-x-4 hover:bg-gray-50 cursor-pointer transition-colors">
-                    <div className={`w-7 h-7 md:w-8 md:h-8 rounded-full text-white flex items-center justify-center text-[10px] md:text-xs font-bold ${update.color} flex-shrink-0 mt-1 shadow-sm`}>
-                      {update.initials}
-                    </div>
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex flex-wrap items-center gap-1 md:gap-2">
-                        <span className="font-bold text-navy text-[13px] md:text-sm truncate">{update.name}</span>
-                        {update.task && update.task !== "General" && (
-                          <span className="text-[8px] md:text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-bold truncate max-w-[100px] md:max-w-none">{update.task}</span>
-                        )}
-                      </div>
-                      <p className="text-[13px] md:text-sm text-gray-600 mt-1 leading-relaxed line-clamp-2 md:line-clamp-none">{update.message}</p>
-                    </div>
-                    <span className="text-[9px] md:text-[10px] font-medium text-gray-400 whitespace-nowrap flex-shrink-0 mt-1">{update.time}</span>
-                  </div>
-                ))
-              )}
             </div>
           </div>
 

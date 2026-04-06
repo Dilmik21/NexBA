@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ClientTopBar from "../../components/Client/ClientTopBar";
 import ClientSidebar from "../../components/Client/ClientSidebar";
-import RequestModificationModal from "../../components/Client/RequestModificationModal";
 import { useAuth } from "../../contexts/AuthContext";
-import { Loader2, CheckCircle2, AlertTriangle, FileText, Search, Link as LinkIcon, Paperclip, ChevronDown, Check, X, Image as ImageIcon, Video, ExternalLink, Bug, Maximize } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, FileText, Search, Link as LinkIcon, ExternalLink, ChevronDown, X, Bug, Maximize } from "lucide-react";
 
 export default function ClientApprovals() {
   const { currentUser } = useAuth();
@@ -19,7 +18,6 @@ export default function ClientApprovals() {
   const [changeDescription, setChangeDescription] = useState("");
   const [isSubmittingChange, setIsSubmittingChange] = useState(false);
 
-  // FIXED: Auto-refresh background polling function
   const fetchApprovals = async (isBackground = false) => {
     if (!isBackground) setIsLoading(true);
     try {
@@ -28,12 +26,11 @@ export default function ClientApprovals() {
       if (data.success && Array.isArray(data.data)) {
         setApprovals(data.data);
         
-        // Safely update selectedItem so it doesn't interrupt the user
         setSelectedItem(prevSelected => {
           if (!prevSelected && data.data.length > 0) return data.data[0];
           if (prevSelected) {
             const updated = data.data.find(r => r.reqId === prevSelected.reqId);
-            return updated || null; // If it was approved and disappeared, null it out
+            return updated || null; 
           }
           return null;
         });
@@ -45,16 +42,15 @@ export default function ClientApprovals() {
     }
   };
 
-  // FIXED: Set up background polling every 5 seconds
   useEffect(() => {
     if (currentUser?.uid) {
-      fetchApprovals(false); // Initial load with spinner
+      fetchApprovals(false); 
       
       const intervalId = setInterval(() => {
-        fetchApprovals(true); // Silent background load
+        fetchApprovals(true); 
       }, 5000);
       
-      return () => clearInterval(intervalId); // Cleanup
+      return () => clearInterval(intervalId); 
     }
   }, [currentUser]);
 
@@ -123,14 +119,6 @@ export default function ClientApprovals() {
     (r.reqId || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#007BFF]" />
-      </div>
-    );
-  }
-
   return (
     <>
       <style>{`
@@ -178,7 +166,13 @@ export default function ClientApprovals() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-[#FAFAFA]">
-                  {filteredItems.length === 0 ? (
+                  {/* CHANGED: Show loader inside the list */}
+                  {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#007BFF] mb-3" />
+                      <p className="text-sm text-gray-400 font-medium">Loading approvals...</p>
+                    </div>
+                  ) : filteredItems.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <CheckCircle2 className="w-12 h-12 text-green-400 mb-3 opacity-50" />
                       <p className="font-bold text-gray-500">No approvals pending!</p>
@@ -197,23 +191,22 @@ export default function ClientApprovals() {
                       >
                         <div className="flex justify-between items-start mb-1.5">
                           <div className="flex items-center gap-2">
-                             <div className={`w-2.5 h-2.5 rounded-full ${selectedItem?.reqId === req.reqId ? 'bg-[#007BFF]' : 'bg-gray-300'}`}></div>
-                             <span className="text-[11px] font-bold text-[#007BFF]">{req.reqId}</span>
+                              <div className={`w-2.5 h-2.5 rounded-full ${selectedItem?.reqId === req.reqId ? 'bg-[#007BFF]' : 'bg-gray-300'}`}></div>
+                              <span className="text-[11px] font-bold text-[#007BFF]">{req.reqId}</span>
                           </div>
                           
-                          {/* SHOW STATUS DIFFERENCE */}
                           {req.status === 'Change Requested' ? (
-                             <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-orange-50 text-orange-600 flex items-center border border-orange-100">
-                               <AlertTriangle className="w-3 h-3 mr-1" /> Change Requested
-                             </span>
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-orange-50 text-orange-600 flex items-center border border-orange-100">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> Change Requested
+                              </span>
                           ) : req.rejectionReason ? (
-                             <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-red-50 text-red-600 flex items-center border border-red-100">
-                               <AlertTriangle className="w-3 h-3 mr-1" /> CR Declined
-                             </span>
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-red-50 text-red-600 flex items-center border border-red-100">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> CR Declined
+                              </span>
                           ) : (
-                             <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-blue-50 text-[#007BFF] flex items-center">
-                               Needs Review
-                             </span>
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-blue-50 text-[#007BFF] flex items-center">
+                                Needs Review
+                              </span>
                           )}
                         </div>
                         <h4 className="font-bold text-navy text-[14px] leading-tight line-clamp-2 mb-1">{req.title}</h4>
@@ -330,13 +323,12 @@ export default function ClientApprovals() {
                               <div className="flex flex-col gap-6">
                                 {selectedItem.evidence.files.map((file, idx) => {
                                   const isImage = file.base64?.startsWith('data:image') || file.type?.startsWith('image/');
-                                  const isVideo = file.type && file.type.startsWith('video/');
                                   
                                   return (
                                     <div key={idx} className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col group">
                                       
                                       <div className="p-4 bg-white border-b border-gray-100 flex items-center gap-3 flex-shrink-0">
-                                        {isImage ? <ImageIcon className="w-5 h-5 text-gray-400 flex-shrink-0" /> : <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />}
+                                        <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
                                         <span className="text-[14px] font-semibold text-navy truncate block w-full">{file.name}</span>
                                       </div>
 
@@ -355,7 +347,7 @@ export default function ClientApprovals() {
                                         </div>
                                       ) : (
                                         <div className="w-full py-16 flex flex-col items-center justify-center bg-blue-50/50">
-                                          {isVideo ? <Video className="w-12 h-12 text-[#007BFF] mb-3 opacity-70" /> : <Paperclip className="w-12 h-12 text-[#007BFF] mb-3 opacity-70" />}
+                                          <FileText className="w-12 h-12 text-[#007BFF] mb-3 opacity-70" />
                                           <span className="text-[12px] text-navy font-semibold px-4 text-center truncate max-w-sm">{file.name}</span>
                                           <a href={file.base64 || '#'} target="_blank" rel="noreferrer" className="mt-3 text-[#007BFF] text-[13px] font-bold hover:underline">Download File</a>
                                         </div>
@@ -382,7 +374,6 @@ export default function ClientApprovals() {
                     {selectedItem.status !== 'Change Requested' ? (
                       <div className="p-5 md:p-6 bg-white border-t border-gray-100 flex justify-end gap-3 flex-shrink-0 z-10 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.05)]">
                         
-                        {/* Only allow Request Changes if there isn't already a rejection */}
                         {!selectedItem.rejectionReason && (
                           <button 
                             onClick={() => setIsModalOpen(true)}

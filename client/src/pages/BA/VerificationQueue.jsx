@@ -16,7 +16,6 @@ export default function VerificationQueue() {
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  // --- REAL-TIME SILENT POLLING ---
   const fetchVerifications = async (isBackground = false) => {
     if (!isBackground) setIsLoading(true);
     try {
@@ -26,11 +25,10 @@ export default function VerificationQueue() {
       if (json.success && Array.isArray(json.data)) {
         setVerifications(json.data);
         
-        // Safely update selected item without disrupting the BA
         setSelectedItem(prev => {
           if (prev) {
             const updated = json.data.find(v => v.id === prev.id);
-            return updated || null; // If it was approved/rejected by another BA, hide it
+            return updated || null; 
           }
           if (json.data.length > 0 && !isBackground && window.innerWidth >= 1024) {
             return json.data[0];
@@ -47,14 +45,13 @@ export default function VerificationQueue() {
 
   useEffect(() => {
     if (currentUser?.uid) {
-      fetchVerifications(false); // First load
+      fetchVerifications(false); 
       
-      // Silent refresh every 5 seconds
       const intervalId = setInterval(() => {
         fetchVerifications(true);
       }, 5000);
       
-      return () => clearInterval(intervalId); // Cleanup
+      return () => clearInterval(intervalId); 
     }
   }, [currentUser]);
 
@@ -123,14 +120,6 @@ export default function VerificationQueue() {
     (v.reqId || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#007BFF]" />
-      </div>
-    );
-  }
-
   return (
     <>
       <style>{`
@@ -158,7 +147,6 @@ export default function VerificationQueue() {
 
             <div className="flex flex-col lg:flex-row flex-1 min-h-0 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
               
-              {/* LEFT PANE */}
               <div className={`w-full lg:w-[35%] flex-col bg-[#FAFAFA] border-r border-gray-100 h-full flex-shrink-0 ${selectedItem ? 'hidden lg:flex' : 'flex'}`}>
                 <div className="p-5 border-b border-gray-100 bg-white flex-shrink-0">
                   <div className="flex justify-between items-center mb-4">
@@ -178,7 +166,13 @@ export default function VerificationQueue() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-[#FAFAFA]">
-                  {filteredItems.length === 0 ? (
+                  {/* CHANGED: Loader is now inside the list */}
+                  {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#007BFF] mb-3" />
+                      <p className="text-sm text-gray-400 font-medium">Loading queue...</p>
+                    </div>
+                  ) : filteredItems.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <CheckCircle2 className="w-12 h-12 text-green-400 mb-3 opacity-50" />
                       <p className="font-bold text-gray-500">Queue is Empty</p>
@@ -211,7 +205,6 @@ export default function VerificationQueue() {
                 </div>
               </div>
 
-              {/* RIGHT PANE */}
               <div className={`w-full lg:w-[65%] flex-col h-full bg-white relative min-w-0 ${!selectedItem ? 'hidden lg:flex' : 'flex'}`}>
                 
                 {!selectedItem ? (
@@ -238,7 +231,6 @@ export default function VerificationQueue() {
 
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-[#F8FAFC] space-y-8">
                       
-                      {/* SUBMITTED EVIDENCE SECTION */}
                       <div>
                         <h4 className="text-[12px] font-bold text-[#007BFF] uppercase tracking-widest mb-3 flex items-center gap-2">
                            <CheckCircle2 className="w-4 h-4 text-[#007BFF]" /> Developer's Evidence
@@ -246,7 +238,6 @@ export default function VerificationQueue() {
                         
                         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-6">
                            
-                           {/* Links */}
                            {selectedItem.evidence?.githubLink ? (
                              <div>
                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Project / Repository Link</p>
@@ -264,7 +255,6 @@ export default function VerificationQueue() {
                              </div>
                            )}
 
-                           {/* Notes */}
                            <div>
                              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Developer Notes</p>
                              <div className="bg-[#FAFAFA] p-4 rounded-xl border border-gray-100 text-[13px] text-navy leading-relaxed whitespace-pre-wrap">
@@ -272,7 +262,6 @@ export default function VerificationQueue() {
                              </div>
                            </div>
 
-                           {/* Uploaded Files / Visual Proof */}
                            <div>
                              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Visual Proof / Attachments</p>
                              {selectedItem.evidence?.files && selectedItem.evidence.files.length > 0 ? (
@@ -297,7 +286,6 @@ export default function VerificationQueue() {
                         </div>
                       </div>
 
-                      {/* ORIGINAL SPECIFICATION REFERENCE */}
                       <div>
                         <h4 className="text-[12px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                            <FileText className="w-4 h-4 text-gray-400" /> Original Requirement Context
@@ -311,7 +299,6 @@ export default function VerificationQueue() {
 
                     </div>
 
-                    {/* ACTION FOOTER */}
                     <div className="p-5 md:p-6 bg-white border-t border-gray-100 flex flex-col gap-3 flex-shrink-0 z-10 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.05)]">
                       
                       {showRejectInput && (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, Filter, Plus, Eye, X, ChevronDown, Check } from "lucide-react";
 import { getAuth, onAuthStateChanged } from "firebase/auth"; 
+import { useLocation, useNavigate } from "react-router-dom"; // IMPORTED ROUTER HOOKS
 import ClientTopBar from "../../components/Client/ClientTopBar";
 import ClientSidebar from "../../components/Client/ClientSidebar";
 import NewProjectModal from "../../components/Client/NewProjectModal";
@@ -17,16 +18,21 @@ export default function MyRequests() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef(null);
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const stageOptions = [
     "All Stages",
     "Pending BA Review",
     "In Analysis", 
     "Clarification Needed",
-    "Ready to Develop",
-    "Developing",
-    "UAT",
-    "Change Request",
-    "Complete"
+    "Sent to Engineering",
+    "In Progress",
+    "Ready for Review",
+    "Pending Verification",
+    "Client UAT",
+    "Change Requested",
+    "Completed"
   ];
 
   useEffect(() => {
@@ -67,16 +73,40 @@ export default function MyRequests() {
     }
   };
 
+  // --- NEW: AUTO-SELECT AND FILTER FROM TOPBAR SEARCH ---
+  useEffect(() => {
+    if (!isLoading && requests.length > 0 && location.state?.highlightReqId) {
+      const targetId = location.state.highlightReqId;
+      
+      // Filter the table
+      setSearchTerm(targetId);
+      setFilterStage("All Stages");
+      
+      // Auto-open the modal
+      const targetReq = requests.find(r => r.id === targetId);
+      if (targetReq) {
+        setSelectedRequest(targetReq);
+      }
+
+      // Clear the background state so it doesn't re-trigger if they close the modal
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [isLoading, requests, location.state, navigate, location.pathname]);
+
   const getStageStyle = (stage) => {
     const s = stage?.toLowerCase() || "";
-    if (s.includes("pending") || s.includes("review")) return "bg-orange-50 text-orange-600 border border-orange-100";
-    if (s.includes("analysis")) return "bg-yellow-50 text-yellow-600 border border-yellow-100";
-    if (s.includes("clarification")) return "bg-red-50 text-red-600 border border-red-100";
-    if (s.includes("ready")) return "bg-indigo-50 text-indigo-600 border border-indigo-100";
-    if (s.includes("develop")) return "bg-blue-50 text-blue-600 border border-blue-200";
-    if (s.includes("uat")) return "bg-purple-50 text-purple-600 border border-purple-200";
-    if (s.includes("change") || s.includes("modification")) return "bg-amber-50 text-amber-600 border border-amber-200";
-    if (s.includes("complete") || s.includes("live") || s.includes("approved")) return "bg-green-50 text-green-600 border border-green-200";
+    
+    if (s === "pending ba review") return "bg-gray-100 text-gray-600 border border-gray-200";
+    if (s.includes("analysis")) return "bg-yellow-50 text-yellow-700 border border-yellow-200";
+    if (s.includes("clarification")) return "bg-red-50 text-red-600 border border-red-200";
+    if (s.includes("sent to engineering")) return "bg-blue-50 text-blue-500 border border-blue-200";
+    if (s.includes("in progress")) return "bg-blue-100 text-blue-700 border border-blue-300";
+    if (s.includes("ready for review")) return "bg-teal-50 text-teal-700 border border-teal-200";
+    if (s.includes("pending verification") || s.includes("awaiting verification")) return "bg-purple-50 text-purple-700 border border-purple-200";
+    if (s.includes("change requested") || s.includes("modification requested")) return "bg-orange-50 text-orange-600 border border-orange-200";
+    if (s.includes("uat") || s.includes("pending approval")) return "bg-indigo-50 text-indigo-600 border border-indigo-200";
+    if (s.includes("complete") || s.includes("done") || s.includes("approved") || s.includes("live")) return "bg-green-50 text-green-700 border border-green-200";
+    
     return "bg-gray-50 text-gray-500 border border-gray-200";
   };
 
@@ -112,7 +142,6 @@ export default function MyRequests() {
 
         <div className="flex-1 pb-10 flex flex-col h-[calc(100vh-100px)]">
           
-          {/* HEADER AREA - MATCHES ARCHIVE PAGE STYLE */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-6 gap-4">
             <div>
               <h1 className="text-[22px] md:text-2xl font-bold text-navy">My Requests</h1>
@@ -173,11 +202,9 @@ export default function MyRequests() {
             </div>
           </div>
 
-          {/* MAIN TABLE CONTAINER - CLEAN WHITE ARCHIVE DESIGN */}
           <div className="bg-white rounded-3xl md:rounded-[2rem] border border-gray-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col flex-1 min-h-0 overflow-hidden">
             <div className="overflow-y-auto flex-1 w-full">
               <table className="w-full text-left border-collapse relative">
-                {/* Header: Pure white, thin border, matching Archive Page */}
                 <thead className="sticky top-0 bg-white z-10 border-b border-gray-100">
                   <tr>
                     <th className="py-6 px-8 text-[11px] font-bold text-gray-400 uppercase tracking-widest w-[15%]">ID</th>
@@ -218,7 +245,6 @@ export default function MyRequests() {
               </table>
             </div>
             
-            {/* Footer: Pure white matching Archive Page */}
             {!isLoading && (
               <div className="px-8 py-5 border-t border-gray-100 bg-white text-[11px] font-medium text-gray-400 tracking-wide mt-auto">
                 Showing {filteredRequests.length} requirement(s). Data is synced in real-time.
@@ -228,7 +254,6 @@ export default function MyRequests() {
         </div>
       </div>
 
-      {/* MODAL */}
       {selectedRequest && (
         <div className="fixed inset-0 bg-navy/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">

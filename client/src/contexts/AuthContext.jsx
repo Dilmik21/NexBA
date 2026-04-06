@@ -8,7 +8,7 @@ import {
   sendPasswordResetEmail,
   sendEmailVerification 
 } from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc, onSnapshot } from "firebase/firestore"; // <-- IMPORTED onSnapshot
+import { doc, setDoc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 
 const AuthContext = createContext();
 
@@ -21,8 +21,7 @@ export function AuthProvider({ children }) {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // We keep this function so it doesn't break any existing code, 
-  // but the real-time listener below handles the automatic updates now!
+  // Kept for backward compatibility, but onSnapshot handles real-time updates now
   const refreshUserData = async () => {
     if (currentUser) {
       try {
@@ -72,7 +71,7 @@ export function AuthProvider({ children }) {
     return signOut(auth);
   }
 
-  // 4. Password Reset
+  // 4. Password Reset (Added perfectly!)
   function resetPassword(email) {
     return sendPasswordResetEmail(auth, email);
   }
@@ -80,7 +79,7 @@ export function AuthProvider({ children }) {
   // 5. Watcher: Checks who is logged in and manages real-time updates
   useEffect(() => {
     let handleTabClose = null;
-    let unsubscribeUserDoc = null; // Variable to hold the real-time listener
+    let unsubscribeUserDoc = null; 
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -88,14 +87,12 @@ export function AuthProvider({ children }) {
       if (user) {
         const docRef = doc(db, "users", user.uid);
         
-        // --- THE FIX: Real-Time Listener ---
-        // This listens to the database instantly. When you upload a profile pic in settings,
-        // it updates the DB, and this listener instantly updates the TopBar without refreshing!
+        // --- REAL-TIME PROFILE LISTENER ---
         unsubscribeUserDoc = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
             setUserData(docSnap.data());
           }
-          setLoading(false); // Turn off loading screen once data arrives
+          setLoading(false); 
         }, (error) => {
           console.error("Real-time profile sync error:", error);
           setLoading(false);
@@ -113,7 +110,7 @@ export function AuthProvider({ children }) {
         window.addEventListener('beforeunload', handleTabClose);
 
       } else {
-        // If no user is logged in, clean up listeners
+        // Clean up when user logs out
         setUserData(null);
         setLoading(false);
         
@@ -129,6 +126,7 @@ export function AuthProvider({ children }) {
       }
     });
 
+    // Final cleanup when component unmounts
     return () => {
       unsubscribeAuth();
       if (unsubscribeUserDoc) unsubscribeUserDoc();
@@ -143,7 +141,7 @@ export function AuthProvider({ children }) {
     signup, 
     login, 
     logout, 
-    resetPassword 
+    resetPassword // Fully exposed and ready to use in Login.jsx!
   };
 
   return (

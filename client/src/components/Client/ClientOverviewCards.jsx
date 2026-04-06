@@ -17,7 +17,6 @@ export default function ClientOverviewCards() {
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // Fetch data exactly ONCE when the user is confirmed
         fetchOverviewStats(user.uid, true);
       } else {
         setIsLoading(false);
@@ -32,8 +31,13 @@ export default function ClientOverviewCards() {
       if (showLoader) setIsLoading(true);
       const response = await fetch(`http://localhost:5000/api/client/overview-stats?uid=${uid}`);
       const data = await response.json();
-      if (data.success) {
-        setStats(data.stats);
+      if (data.success && data.stats) {
+        setStats({
+          totalActive: data.stats.totalActive || 0,
+          pendingApprovals: data.stats.pendingApprovals || 0,
+          inAnalysis: data.stats.inAnalysis || 0,
+          clarificationsNeeded: data.stats.clarificationsNeeded || 0
+        });
       }
     } catch (error) {
       console.error("Failed to load overview stats:", error);

@@ -47,10 +47,12 @@ export default function ClientClarifications() {
     }
   };
 
+  // --- FIXED: PERFECTLY CLEARS WORK WHEN SWITCHING QUESTIONS ---
   const handleSelect = (q) => {
     setSelectedQuestion(q);
     setAnswerText(""); 
     setAttachedFile(null); 
+    if (fileInputRef.current) fileInputRef.current.value = ""; // Wipes browser file memory
   };
 
   const handleFileChange = (e) => {
@@ -58,6 +60,7 @@ export default function ClientClarifications() {
     if (file) {
       if (file.size > 15 * 1024 * 1024) { 
         alert("File is too large. Please select a file under 15MB.");
+        if (fileInputRef.current) fileInputRef.current.value = ""; // Clear bad file
         return;
       }
       const reader = new FileReader();
@@ -71,23 +74,22 @@ export default function ClientClarifications() {
     }
   };
 
-  // --- UPDATED: SEND ANSWER LOGIC (WITH UID FOR AUTH) ---
+  // --- FIXED: PERFECTLY CLEARS WORK AFTER SUBMISSION ---
   const handleSendAnswer = async () => {
     if (!answerText.trim() || !selectedQuestion) return;
     
     setIsSubmitting(true);
     try {
       const payload = { 
-        uid: currentUser.uid, // Passes the UID in the body for the backend to verify
+        uid: currentUser.uid,
         reqId: selectedQuestion.reqId, 
         answer: answerText.trim(),
-        status: "Answered", // Marks the question as finished
+        status: "Answered", 
         answeredAt: new Date().toLocaleString(),
         fileName: attachedFile ? attachedFile.name : null,
         fileData: attachedFile ? attachedFile.data : null
       };
 
-      // Appends the ?uid= parameter to the URL to satisfy the auth middleware
       const response = await fetch(`http://localhost:5000/api/client/clarifications/${selectedQuestion.id}/answer?uid=${currentUser.uid}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,7 +103,7 @@ export default function ClientClarifications() {
       const json = await response.json();
       
       if (json.success) {
-        // UI FINISH: Remove from current list immediately
+        // Remove from current list immediately
         const remainingQuestions = questions.filter(q => q.id !== selectedQuestion.id);
         setQuestions(remainingQuestions);
         
@@ -111,8 +113,10 @@ export default function ClientClarifications() {
           setSelectedQuestion(null);
         }
         
+        // Wipe all inputs completely clean
         setAnswerText("");
         setAttachedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = ""; 
       } else {
         alert("Server received the answer but failed to save it.");
       }
@@ -122,6 +126,11 @@ export default function ClientClarifications() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const removeAttachment = () => {
+    setAttachedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = ""; // Wipes memory so they can re-upload same file if needed
   };
 
   const timeAgo = (dateString) => {
@@ -249,7 +258,8 @@ export default function ClientClarifications() {
                             <FileText className="w-4 h-4 mr-2" />
                             <span className="truncate max-w-[200px]">{attachedFile.name}</span>
                           </div>
-                          <button onClick={() => setAttachedFile(null)} className="p-1 hover:text-red-500"><X className="w-4 h-4" /></button>
+                          {/* UPDATED: Uses the safe remove function */}
+                          <button onClick={removeAttachment} className="p-1 hover:text-red-500"><X className="w-4 h-4" /></button>
                         </div>
                       )}
 

@@ -1,27 +1,38 @@
 import { useState, useEffect } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 
 export default function ClientChangeRequests() {
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch the warning data from your Node.js backend
   useEffect(() => {
-    const fetchChangeRequests = async () => {
-      try {
-        const response = await fetch("http://localhost:5000/api/client/change-requests");
-        const result = await response.json();
-        if (result.success) {
-          setRequests(result.data);
-        }
-      } catch (error) {
-        console.error("Failed to load change requests:", error);
-      } finally {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        fetchChangeRequests(user.uid);
+      } else {
         setIsLoading(false);
       }
-    };
-    fetchChangeRequests();
+    });
+    return () => unsubscribe();
   }, []);
+
+  const fetchChangeRequests = async (uid) => {
+    try {
+      setIsLoading(true);
+      // FIXED: Added ?uid= to the URL
+      const response = await fetch(`http://localhost:5000/api/client/change-requests?uid=${uid}`);
+      const result = await response.json();
+      if (result.success) {
+        setRequests(result.data);
+      }
+    } catch (error) {
+      console.error("Failed to load change requests:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-3xl md:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border-2 border-orange-200 overflow-hidden mt-6 md:mt-8">
@@ -35,7 +46,9 @@ export default function ClientChangeRequests() {
       {/* List of Change Requests */}
       <div className="p-3 md:p-4 space-y-2 md:space-y-4">
         {isLoading ? (
-          <div className="text-center py-6 text-gray-400 text-sm">Loading change requests...</div>
+          <div className="text-center py-6 text-gray-400 text-sm flex items-center justify-center">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading change requests...
+          </div>
         ) : requests.length === 0 ? (
           <div className="text-center py-6 text-gray-400 text-[13px] md:text-sm">No active change requests pending.</div>
         ) : (

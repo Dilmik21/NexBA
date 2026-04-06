@@ -21,7 +21,6 @@ export default function ClientMessages() {
   const fileInputRef = useRef(null);
   const chatEndRef = useRef(null);
 
-  // --- 1. LOAD PROJECTS & UNREAD COUNTS ---
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -30,7 +29,6 @@ export default function ClientMessages() {
         
         if (json.success && Array.isArray(json.data)) {
           setProjects(json.data);
-          // Auto-select first project on desktop only
           if (json.data.length > 0 && window.innerWidth >= 1024) {
              setSelectedReqId(json.data[0].id);
           }
@@ -50,7 +48,6 @@ export default function ClientMessages() {
     }
   }, [currentUser]);
 
-  // --- 2. POLLING MESSAGES & MARK AS READ ---
   useEffect(() => {
     let interval;
     if (selectedReqId && currentUser?.uid) {
@@ -63,7 +60,6 @@ export default function ClientMessages() {
             setMessages(json.data);
           }
 
-          // Mark as read silently
           await fetch(`http://localhost:5000/api/client/chat/${selectedReqId}/read?uid=${currentUser.uid}`, { 
             method: "PUT" 
           });
@@ -80,7 +76,6 @@ export default function ClientMessages() {
     return () => clearInterval(interval);
   }, [selectedReqId, currentUser]);
 
-  // --- 3. AUTO-SCROLL TO BOTTOM ---
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, selectedReqId]);
@@ -107,7 +102,6 @@ export default function ClientMessages() {
       senderName: currentUser?.displayName || "Client" 
     };
 
-    // Optimistic UI Update
     const tempMsg = {
         ...payload,
         id: Date.now(),
@@ -155,19 +149,15 @@ export default function ClientMessages() {
     }
   };
 
-  // --- STRICT INITIALS LOGIC ---
   const getInitials = (name) => {
     if (!name) return "BA";
     const cleanName = name.trim();
     if (cleanName === "Business Analyst" || cleanName === "Unknown BA") return "BA";
     
-    // Split by spaces. E.g., "Bhashini Fernando" -> ["Bhashini", "Fernando"]
     const parts = cleanName.split(/\s+/); 
     if (parts.length >= 2) {
-      // First letter of First Name + First letter of Last Name (e.g., "B" + "F" = "BF")
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    // Fallback if they only have one name
     return cleanName.substring(0, 2).toUpperCase();
   };
 
@@ -179,14 +169,6 @@ export default function ClientMessages() {
     (p.title || "").toLowerCase().includes((searchQuery || "").toLowerCase()) || 
     (p.id || "").toLowerCase().includes((searchQuery || "").toLowerCase())
   );
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#007BFF]" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] overflow-x-hidden">
@@ -223,7 +205,13 @@ export default function ClientMessages() {
               </div>
 
               <div className="flex-1 overflow-y-auto">
-                {filteredProjects.length === 0 ? (
+                {/* CHANGED: Show loader inside the list */}
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#007BFF] mb-3" />
+                    <p className="text-sm text-gray-400 font-medium">Loading projects...</p>
+                  </div>
+                ) : filteredProjects.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-8">
                     {projects.length === 0 ? "No active projects yet." : "No projects match your search."}
                   </p>

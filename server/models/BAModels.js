@@ -40,7 +40,7 @@ class BARequirementModel {
   static async getDashboardData(baId) {
     const [reqSnapshot, devsSnapshot, tasksSnapshot, messagesSnapshot] = await Promise.all([
       db.collection('requirements').get(), 
-      db.collection('users').get(), // Changed to fetch all for flexible filtering
+      db.collection('users').get(), 
       db.collection('tasks').get().catch(() => ({ empty: true, forEach: () => {} })), 
       db.collection('messages').where('senderRole', '==', 'Developer').get().catch(() => ({ empty: true, forEach: () => {} })) 
     ]);
@@ -48,30 +48,12 @@ class BARequirementModel {
     let pendingReviews = 0, verificationQueueCount = 0, criticalRisks = 0, activeReqs = 0;
     let rawInbox = [], rawChangeRequests = [], rawVerificationQueue = []; 
     
-    let devLoadMap = {};
-    devsSnapshot.forEach(doc => { 
-        const role = (doc.data().role || "").toLowerCase();
-        if(role === 'developer' || role === 'dev') {
-            devLoadMap[doc.data().fullName] = { name: doc.data().fullName, count: 0 }; 
-        }
-    });
-
-    let reqTaskStatusMap = {}; 
-    if (!tasksSnapshot.empty) {
-      tasksSnapshot.forEach(doc => {
-        const task = doc.data();
-        if (['To Do', 'In Progress', 'In Review', 'Pending Team Assignment'].includes(task.status) && task.teamLeaderName && devLoadMap[task.teamLeaderName]) {
-          devLoadMap[task.teamLeaderName].count++;
-        }
-        if (task.reqId) {
-          if (!reqTaskStatusMap[task.reqId]) reqTaskStatusMap[task.reqId] = [];
-          reqTaskStatusMap[task.reqId].push(task.status || "Unassigned");
-        }
-      });
-    }
-
-    const inProgressStatuses = ["In Analysis", "Clarification Needed", "Sent to Engineering", "In Progress", "Awaiting Verification", "Pending Verification", "Modification Requested", "Change Requested"];
     const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
+    const preDevStatuses = ['Pending BA Review', 'In Analysis', 'Clarification Needed'];
+
+    // --- BULLETPROOF DEVELOPER COUNTING ---
+    const activeReqIdsPerDevId = {};
+    const activeReqIdsPerDevName = {};
 
     reqSnapshot.forEach(doc => {
       const data = doc.data();
@@ -80,7 +62,22 @@ class BARequirementModel {
       const dbBaId = data.baId || ""; 
       const isUnassigned = dbBaId === "";
       const isMine = baId && dbBaId === baId; 
-      const isFinished = finishedStatuses.includes(data.status);
+      
+      const status = data.status || "Pending BA Review";
+      const isFinished = finishedStatuses.includes(status);
+      const isPreDev = preDevStatuses.includes(status);
+
+      // Track active assignments from Requirements
+      if (!isFinished && !isPreDev) {
+        if (data.teamLeaderId) {
+            if (!activeReqIdsPerDevId[data.teamLeaderId]) activeReqIdsPerDevId[data.teamLeaderId] = new Set();
+            activeReqIdsPerDevId[data.teamLeaderId].add(rawReqId);
+        }
+        if (data.teamLeaderName) {
+            if (!activeReqIdsPerDevName[data.teamLeaderName]) activeReqIdsPerDevName[data.teamLeaderName] = new Set();
+            activeReqIdsPerDevName[data.teamLeaderName].add(rawReqId);
+        }
+      }
 
       if (isUnassigned) {
         pendingReviews++; 
@@ -90,39 +87,62 @@ class BARequirementModel {
       }
 
       if (isMine) {
-        if (data.status === "Modification Requested" || data.status === "Change Requested") {
+        if (status === "Modification Requested" || status === "Change Requested") {
           const changeRisk = getChangeRisk(data);
           if (changeRisk === "High") criticalRisks++;
           rawChangeRequests.push({ id: rawReqId, title: data.lastChangeType ? `${data.lastChangeType} — "${data.title}"` : `Change Request — "${data.title}"`, from: clientName, time: getTimeAgo(data.changeRequestedAt || data.submittedAt), risk: changeRisk, rawDate: data.changeRequestedAt || data.submittedAt || 0 });
         }
         
-        if (data.status === "Awaiting Verification" || data.status === "Pending Verification") {
+        if (status === "Awaiting Verification" || status === "Pending Verification") {
           verificationQueueCount++;
           rawVerificationQueue.push({ id: rawReqId, title: data.title || "Untitled Update", dev: data.teamLeaderName || data.developerName || "Unknown Developer", date: formatShortDate(data.verificationSubmittedAt || data.updatedAt), rawDate: data.verificationSubmittedAt || data.updatedAt || 0 });
         }
 
-        if (inProgressStatuses.includes(data.status)) {
-          let isFullyFinished = false;
-          const reqTasks = reqTaskStatusMap[rawReqId];
-          if (reqTasks && reqTasks.length > 0) {
-            isFullyFinished = reqTasks.every(status => ['Client Accepted', 'Completed', 'Done'].includes(status));
-          }
-          if (!isFullyFinished) activeReqs++;
+        if (!isFinished && !isPreDev) {
+          activeReqs++;
         }
       }
     });
 
-    let developerLoad = Object.values(devLoadMap);
-    if (developerLoad.length === 0) developerLoad = [{ name: "No Developers Active", count: 0 }];
-    developerLoad.sort((a, b) => b.count - a.count);
-    const maxCount = Math.max(...developerLoad.map(d => d.count), 40);
-    developerLoad = developerLoad.map(dev => {
-      let color = "bg-[#10B981]", textColor = "text-white";
-      if (dev.count >= 35) { color = "bg-gray-100"; textColor = "text-gray-400"; } 
-      else if (dev.count >= 25) { color = "bg-yellow-500"; } 
-      else if (dev.count >= 15) { color = "bg-[#0A66C2]"; }
-      return { name: dev.name, count: dev.count, color: color, textColor: textColor, widthPercent: Math.max((dev.count / maxCount) * 100, 5) };
+    // Track active assignments from Tasks (Catches older test data)
+    if (!tasksSnapshot.empty) {
+      tasksSnapshot.forEach(doc => {
+        const taskData = doc.data();
+        if (taskData.status !== 'Unassigned' && !finishedStatuses.includes(taskData.status)) {
+          if (taskData.teamLeaderId) {
+              if (!activeReqIdsPerDevId[taskData.teamLeaderId]) activeReqIdsPerDevId[taskData.teamLeaderId] = new Set();
+              activeReqIdsPerDevId[taskData.teamLeaderId].add(taskData.reqId);
+          }
+          if (taskData.teamLeaderName) {
+              if (!activeReqIdsPerDevName[taskData.teamLeaderName]) activeReqIdsPerDevName[taskData.teamLeaderName] = new Set();
+              activeReqIdsPerDevName[taskData.teamLeaderName].add(taskData.reqId);
+          }
+        }
+      });
+    }
+
+    let developerLoad = [];
+    devsSnapshot.forEach(doc => { 
+        const data = doc.data();
+        const role = (data.role || "").toLowerCase();
+        if(role === 'developer' || role === 'dev' || role === 'engineering') {
+            const fullName = data.fullName || data.name || "Unknown Leader";
+            const loadById = activeReqIdsPerDevId[doc.id] ? activeReqIdsPerDevId[doc.id].size : 0;
+            const loadByName = activeReqIdsPerDevName[fullName] ? activeReqIdsPerDevName[fullName].size : 0;
+            const trueLoad = Math.max(loadById, loadByName);
+
+            let color = "bg-[#10B981]", textColor = "text-white";
+            if (trueLoad >= 8) color = "bg-red-500"; 
+            else if (trueLoad >= 4) color = "bg-yellow-500"; 
+            
+            const widthPercent = Math.max(Math.min((trueLoad / 10) * 100, 100), 5);
+            
+            developerLoad.push({ name: fullName, count: trueLoad, color, textColor, widthPercent });
+        }
     });
+
+    if (developerLoad.length === 0) developerLoad = [{ name: "No Developers Active", count: 0, color: "bg-gray-200", textColor: "text-gray-500", widthPercent: 5 }];
+    developerLoad.sort((a, b) => b.count - a.count);
 
     let rawDeveloperUpdates = [];
     if (!messagesSnapshot.empty) {
@@ -195,7 +215,12 @@ class BARequirementModel {
     snapshot.forEach(doc => {
       const data = doc.data();
       if (data.aiProcessedData) {
-        history.push({ id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, title: data.title || 'Untitled', rawDate: data.submittedAt || 0 });
+        history.push({ 
+            id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, 
+            title: data.title || 'Untitled', 
+            status: data.status || 'Unknown', 
+            rawDate: data.submittedAt || 0 
+        });
       }
     });
     history.sort((a, b) => (b.rawDate?.toMillis?.() || 0) - (a.rawDate?.toMillis?.() || 0));
@@ -249,7 +274,6 @@ class BATaskModel {
     }
 
     let reqs = [];
-    const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
 
     reqSnapshot.forEach(doc => {
       const data = doc.data();
@@ -261,7 +285,7 @@ class BATaskModel {
         return numA - numB;
       });
 
-      if (data.aiProcessedData && !finishedStatuses.includes(data.status)) {
+      if (data.aiProcessedData) {
         reqs.push({
           id: rawReqId, title: data.title || "Untitled Requirement", status: data.status || "In Analysis",
           projectType: data.projectType || null, teamLeaderName: data.teamLeaderName || null,
@@ -273,21 +297,54 @@ class BATaskModel {
     return { reqs }; 
   }
 
-  // 🚨 THE GHOST DEVELOPER FIX 🚨
+  // --- 🔥 BULLETPROOF DEVELOPER COUNT FIX 🔥 ---
   static async getTeamLeaders() {
-    // 1. Fetch all users to bypass strict case-sensitive role matching
-    const usersSnapshot = await db.collection('users').get();
-    
-    const activeReqsSnap = await db.collection('requirements')
-      .where('status', 'in', ['Sent to Engineering', 'In Progress', 'Awaiting Verification', 'Pending Verification', 'Modification Requested', 'Change Requested'])
-      .get().catch(() => ({ empty: true, forEach: () => {} }));
+    const [usersSnapshot, reqsSnapshot, tasksSnapshot] = await Promise.all([
+        db.collection('users').get(),
+        db.collection('requirements').get(),
+        db.collection('tasks').get().catch(() => ({ empty: true, forEach: () => {} }))
+    ]);
       
-    let reqLoadMap = {};
-    if (!activeReqsSnap.empty) {
-      activeReqsSnap.forEach(doc => {
-        const reqData = doc.data();
-        if (reqData.teamLeaderId) reqLoadMap[reqData.teamLeaderId] = (reqLoadMap[reqData.teamLeaderId] || 0) + 1;
-      });
+    let activeReqIdsPerDevId = {};
+    let activeReqIdsPerDevName = {};
+
+    const inactiveStatuses = [
+        'Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done',
+        'Pending BA Review', 'In Analysis', 'Clarification Needed'
+    ];
+
+    // 1. Scan Requirements Collection
+    reqsSnapshot.forEach(doc => {
+      const reqData = doc.data();
+      const status = reqData.status || "";
+      
+      if (!inactiveStatuses.includes(status)) {
+        if (reqData.teamLeaderId) {
+            if (!activeReqIdsPerDevId[reqData.teamLeaderId]) activeReqIdsPerDevId[reqData.teamLeaderId] = new Set();
+            activeReqIdsPerDevId[reqData.teamLeaderId].add(reqData.reqId || doc.id);
+        }
+        if (reqData.teamLeaderName) {
+            if (!activeReqIdsPerDevName[reqData.teamLeaderName]) activeReqIdsPerDevName[reqData.teamLeaderName] = new Set();
+            activeReqIdsPerDevName[reqData.teamLeaderName].add(reqData.reqId || doc.id);
+        }
+      }
+    });
+
+    // 2. Scan Tasks Collection (Catches older assignments missing on the parent Requirement)
+    if (!tasksSnapshot.empty) {
+        tasksSnapshot.forEach(doc => {
+           const taskData = doc.data();
+           if (taskData.status !== 'Unassigned' && !inactiveStatuses.includes(taskData.status)) {
+              if (taskData.teamLeaderId) {
+                  if (!activeReqIdsPerDevId[taskData.teamLeaderId]) activeReqIdsPerDevId[taskData.teamLeaderId] = new Set();
+                  activeReqIdsPerDevId[taskData.teamLeaderId].add(taskData.reqId);
+              }
+              if (taskData.teamLeaderName) {
+                  if (!activeReqIdsPerDevName[taskData.teamLeaderName]) activeReqIdsPerDevName[taskData.teamLeaderName] = new Set();
+                  activeReqIdsPerDevName[taskData.teamLeaderName].add(taskData.reqId);
+              }
+           }
+        });
     }
 
     const specialtiesList = [ "Web Development", "Mobile Development", "Desktop Development", "Game Development", "Embedded Systems Development", "Cloud Development", "DevOps Development", "AI / Machine Learning Development", "Data Science Development", "Cybersecurity Development" ];
@@ -298,24 +355,28 @@ class BATaskModel {
       const data = doc.data();
       const role = (data.role || "").toLowerCase();
       
-      // Catch ALL variations of developer!
       if (role === 'developer' || role === 'dev' || role === 'engineering') {
           const fullName = data.fullName || data.name || "Unknown Leader";
           const firstName = fullName.split(" ")[0];
+          
+          // Get the unique count of active projects using the Set size
+          const loadById = activeReqIdsPerDevId[doc.id] ? activeReqIdsPerDevId[doc.id].size : 0;
+          const loadByName = activeReqIdsPerDevName[fullName] ? activeReqIdsPerDevName[fullName].size : 0;
+          const trueLoad = Math.max(loadById, loadByName);
+
           leaders.push({
-            id: doc.id, // This guarantees we use the TRUE UID of the developer
+            id: doc.id, 
             fullName: fullName, 
             teamName: data.teamName || `${firstName}'s Team`,
             specialty: data.specialty || specialtiesList[i % specialtiesList.length],
             initials: fullName.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase(),
-            currentLoad: reqLoadMap[doc.id] || 0, 
+            currentLoad: trueLoad, 
             maxLoad: 10 
           });
           i++;
       }
     });
 
-    // If still no developers found, we show an obvious fallback so you know something is wrong
     if (leaders.length === 0) {
       leaders = [
         { id: "dev1", fullName: "Ghost System Developer", teamName: "Fallback Team", specialty: "Web Development", currentLoad: 0, maxLoad: 10, initials: "GH" }
@@ -436,8 +497,19 @@ class BATaskModel {
     tasksQuery.forEach(doc => {
       batch.update(doc.ref, { status: "Pending Team Assignment", teamLeaderId: leaderId, teamLeaderName: leaderName, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     });
+    
     const reqQuery = await db.collection('requirements').where('reqId', '==', reqId).get();
-    if (!reqQuery.empty) batch.update(reqQuery.docs[0].ref, { status: "Sent to Engineering", teamLeaderId: leaderId, teamLeaderName: leaderName });
+    if (!reqQuery.empty) {
+        batch.update(reqQuery.docs[0].ref, { status: "Sent to Engineering", teamLeaderId: leaderId, teamLeaderName: leaderName });
+    } else {
+        const allReqs = await db.collection('requirements').get();
+        allReqs.forEach(doc => {
+            const rId = doc.data().reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
+            if (rId === reqId) {
+                batch.update(doc.ref, { status: "Sent to Engineering", teamLeaderId: leaderId, teamLeaderName: leaderName });
+            }
+        });
+    }
     await batch.commit();
   }
 }
@@ -824,43 +896,57 @@ class BAProgressModel {
       if (data.updatedAt && data.updatedAt > fbSevenDaysAgo) reqsProcessedWeek++;
       else if (data.submittedAt && data.submittedAt > fbSevenDaysAgo && data.status !== 'Pending BA Review') reqsProcessedWeek++;
 
-      let stage = "Analysis"; let progress = 20; let colorClass = "bg-yellow-400"; let badgeClass = "bg-yellow-100 text-yellow-800";
+      let stage = "Initiated"; 
+      let progress = 10; 
+      let colorClass = "bg-gray-400"; 
+      let badgeClass = "bg-gray-100 text-gray-600";
+      
+      const s = (data.status || "").toLowerCase();
 
-      if (['Sent to Engineering', 'In Progress', 'Pending Verification', 'Modification Requested', 'Change Requested'].includes(data.status)) {
-        stage = "Development"; progress = 60; colorClass = "bg-[#007BFF]"; badgeClass = "bg-blue-100 text-blue-800";
-      } else if (['Client UAT', 'Awaiting Verification'].includes(data.status)) {
-        stage = "UAT"; progress = 90; colorClass = "bg-purple-500"; badgeClass = "bg-purple-100 text-purple-800";
-      } else if (['Approved & Live', 'Completed', 'Done', 'Live', 'Closed'].includes(data.status)) {
-        stage = "Completed"; progress = 100; colorClass = "bg-green-500"; badgeClass = "bg-green-100 text-green-800";
+      if (s === "pending ba review") {
+        stage = "Initiated"; progress = 10; colorClass = "bg-gray-400"; badgeClass = "bg-gray-100 text-gray-600";
+      } else if (s.includes("analysis")) {
+        stage = "Analysis"; progress = 20; colorClass = "bg-yellow-500"; badgeClass = "bg-yellow-100 text-yellow-700";
+      } else if (s.includes("clarification")) {
+        stage = "Paused: Client Input"; progress = 20; colorClass = "bg-red-500"; badgeClass = "bg-red-100 text-red-600";
+      } else if (s.includes("sent to engineering")) {
+        stage = "Queued for Dev"; progress = 30; colorClass = "bg-blue-400"; badgeClass = "bg-blue-100 text-blue-600";
+      } else if (s.includes("in progress")) {
+        stage = "Development"; progress = 50; colorClass = "bg-blue-600"; badgeClass = "bg-blue-100 text-blue-800";
+      } else if (s.includes("ready for review")) {
+        stage = "Dev Complete"; progress = 70; colorClass = "bg-teal-500"; badgeClass = "bg-teal-100 text-teal-700";
+      } else if (s.includes("pending verification") || s.includes("awaiting verification")) {
+        stage = "Internal Review"; progress = 80; colorClass = "bg-purple-500"; badgeClass = "bg-purple-100 text-purple-700";
+      } else if (s.includes("change requested") || s.includes("modification requested")) {
+        stage = "Revising Scope"; progress = 85; colorClass = "bg-orange-500"; badgeClass = "bg-orange-100 text-orange-700";
+      } else if (s.includes("uat") || s.includes("pending approval")) {
+        stage = "Ready for UAT"; progress = 90; colorClass = "bg-indigo-500"; badgeClass = "bg-indigo-100 text-indigo-700";
+      } else if (s.includes("complete") || s.includes("done") || s.includes("approved") || s.includes("live")) {
+        stage = "Completed"; progress = 100; colorClass = "bg-green-500"; badgeClass = "bg-green-100 text-green-700";
       }
 
-      timeline.push({ reqId: reqId, title: data.title || "Untitled Project", stage, progress, colorClass, badgeClass, rawDate: data.submittedAt || 0 });
+      timeline.push({ 
+          reqId: reqId, 
+          title: data.title || "Untitled Project", 
+          stage, 
+          progress, 
+          colorClass, 
+          badgeClass, 
+          rawDate: data.submittedAt || 0 
+      });
     });
 
     if (reqIds.length === 0) return { stats: { reqs: 0, tasks: 0, verifications: 0, changes: 0 }, timeline: [] };
 
     const tasksSnap = await db.collection('tasks').get();
-    let tasksAssignedWeek = 0; let verificationsWeek = 0; let taskStatsByReq = {}; 
+    let tasksAssignedWeek = 0; let verificationsWeek = 0; 
 
     tasksSnap.forEach(doc => {
       const data = doc.data();
       if (reqIds.includes(data.reqId)) {
         if (data.createdAt && data.createdAt >= fbSevenDaysAgo) tasksAssignedWeek++;
         if (data.updatedAt && data.updatedAt >= fbSevenDaysAgo && ['Client UAT', 'Completed', 'Done'].includes(data.status)) verificationsWeek++;
-        if(!taskStatsByReq[data.reqId]) taskStatsByReq[data.reqId] = { total: 0, completed: 0 };
-        taskStatsByReq[data.reqId].total++;
-        if(['Client UAT', 'Completed', 'Done'].includes(data.status)) taskStatsByReq[data.reqId].completed++;
       }
-    });
-
-    timeline = timeline.map(item => {
-       if(taskStatsByReq[item.reqId] && taskStatsByReq[item.reqId].total > 0) {
-          const stats = taskStatsByReq[item.reqId];
-          const calcProg = Math.round((stats.completed / stats.total) * 100);
-          if (item.stage === 'Development') item.progress = Math.max(20, calcProg);
-          else if (item.stage === 'UAT') item.progress = Math.max(90, calcProg);
-       }
-       return item;
     });
 
     const crSnap = await db.collection('changeRequests').get();

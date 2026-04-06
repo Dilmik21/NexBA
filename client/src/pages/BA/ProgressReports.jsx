@@ -34,25 +34,21 @@ export default function ProgressReports() {
     }
   };
 
-  // --- BULLETPROOF PDF EXPORT ---
   const handleExportPDF = async () => {
     setIsExporting(true);
     try {
       const element = document.getElementById("report-content");
       if (!element) return;
 
-      // 1. Force scroll to top
       window.scrollTo(0, 0);
 
-      // 2. Wait half a second to ensure all fonts and layouts are settled
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // 3. Render canvas with a locked desktop width to prevent responsive squishing
       const canvas = await html2canvas(element, { 
-        scale: 3, // High resolution
+        scale: 3, 
         useCORS: true,
         backgroundColor: "#ffffff",
-        windowWidth: 1200, // Forces a strict desktop view for the PDF
+        windowWidth: 1200, 
         logging: false
       });
       
@@ -61,7 +57,6 @@ export default function ProgressReports() {
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
       
-      // 4. Add margins so it looks like a professional document
       const margin = 10;
       const printWidth = pdfWidth - (margin * 2);
       const printHeight = (canvas.height * printWidth) / canvas.width;
@@ -72,15 +67,6 @@ export default function ProgressReports() {
       console.error("Failed to export PDF:", error);
     } finally {
       setIsExporting(false);
-    }
-  };
-
-  const getStageColor = (stage) => {
-    switch (stage) {
-      case "Development": return "#007BFF"; // Blue
-      case "UAT": return "#A855F7";         // Purple
-      case "Completed": return "#22C55E";   // Green
-      default: return "#FACC15";            // Yellow (Analysis)
     }
   };
 
@@ -112,7 +98,10 @@ export default function ProgressReports() {
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+            <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
+               <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+               <p className="font-bold text-navy">Compiling Report Data...</p>
+            </div>
           ) : (
             <div id="report-content" className="space-y-6 bg-[#F5F7FA] p-2">
               
@@ -152,7 +141,7 @@ export default function ProgressReports() {
                 </div>
               </div>
 
-              {/* TIMELINE SECTION (STRICT LAYOUT FOR PDF) */}
+              {/* TIMELINE SECTION */}
               <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-gray-100 bg-gray-50/50">
                   <h2 className="text-[16px] font-extrabold text-navy">Project Progress Timeline</h2>
@@ -164,36 +153,28 @@ export default function ProgressReports() {
                   ) : (
                     data.timeline.map((item, index) => (
                       
-                      // Using strict flex row and fixed widths (w-[30%], w-[20%], w-[50%]) to prevent PDF collapsing
                       <div key={index} className="flex items-center justify-between py-5 border-b border-gray-100 last:border-0">
                         
-                        {/* COLUMN 1: PROJECT INFO */}
                         <div className="w-[30%] pr-4 block">
                            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1" style={{ display: 'block' }}>
                              {item.reqId}
                            </div>
-                           {/* break-words and normal whitespace stops text from glitching horizontally */}
                            <div className="text-[14px] font-bold text-navy leading-tight whitespace-normal break-words" style={{ display: 'block' }}>
                              {item.title}
                            </div>
                         </div>
 
-                        {/* COLUMN 2: STAGE BADGE */}
                         <div className="w-[20%] flex justify-start pl-2">
                            <span className={`px-3 py-1.5 text-[11px] font-bold rounded-lg whitespace-nowrap ${item.badgeClass}`}>
                              {item.stage}
                            </span>
                         </div>
 
-                        {/* COLUMN 3: PROGRESS BAR */}
                         <div className="w-[50%] pl-6 pr-2">
                            <div className="h-5 w-full bg-gray-100 rounded-full relative overflow-hidden shadow-inner">
                               <div 
-                                className="h-full transition-all duration-500 ease-in-out flex items-center justify-end pr-2.5 rounded-full"
-                                style={{ 
-                                  width: `${item.progress}%`, 
-                                  backgroundColor: getStageColor(item.stage) 
-                                }}
+                                className={`h-full transition-all duration-1000 ease-out flex items-center justify-end pr-2.5 rounded-full ${item.colorClass}`}
+                                style={{ width: `${item.progress}%` }}
                               >
                                  <span className="text-[10px] font-bold text-white drop-shadow-md tracking-wider">
                                    {item.progress}%

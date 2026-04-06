@@ -15,7 +15,6 @@ export default function ChangeManagement() {
   const [updatingStatus, setUpdatingStatus] = useState(null); 
   const [searchQuery, setSearchQuery] = useState("");
 
-  // THE FIX: Added background polling so the BA sees the dev's submission instantly
   const fetchChangeRequests = async (isBackground = false) => {
     if (!isBackground) setIsLoading(true);
     try {
@@ -24,7 +23,6 @@ export default function ChangeManagement() {
       if (json.success && Array.isArray(json.data)) {
         setChangeRequests(json.data);
         
-        // Safely update selectedCR without interrupting the BA
         setSelectedCR(prev => {
             if (prev) {
                 const updated = json.data.find(c => c.crId === prev.crId);
@@ -43,9 +41,8 @@ export default function ChangeManagement() {
 
   useEffect(() => {
     if (currentUser?.uid) {
-      fetchChangeRequests(false); // Initial load
+      fetchChangeRequests(false); 
       
-      // Silent background fetch every 5 seconds
       const intervalId = setInterval(() => {
         fetchChangeRequests(true);
       }, 5000);
@@ -97,14 +94,6 @@ export default function ChangeManagement() {
     (cr.reqId || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     (cr.crId || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#007BFF]" />
-      </div>
-    );
-  }
 
   const getTimelineRiskText = (score) => {
     if (!score) return "Low risk. Can likely be accommodated within the current sprint without delay.";
@@ -161,7 +150,13 @@ export default function ChangeManagement() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-[#FAFAFA]">
-                  {filteredItems.length === 0 ? (
+                  {/* CHANGED: Loader is now inside the list */}
+                  {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#007BFF] mb-3" />
+                      <p className="text-sm text-gray-400 font-medium">Loading change requests...</p>
+                    </div>
+                  ) : filteredItems.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <CheckCircle2 className="w-12 h-12 text-green-400 mb-3 opacity-50" />
                       <p className="font-bold text-gray-500">No Active Changes</p>
@@ -313,61 +308,78 @@ export default function ChangeManagement() {
 
                     </div>
 
-                    <div className="p-5 md:p-6 bg-white border-t border-gray-100 flex justify-end gap-3 flex-shrink-0 z-10 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.05)]">
-                      {selectedCR.status === 'Pending' ? (
-                        <>
-                          <button 
-                            onClick={() => navigate('/ba/communication', { state: { activeReqId: selectedCR.reqId } })}
-                            disabled={updatingStatus !== null}
-                            className="flex items-center justify-center px-6 py-3.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-bold hover:bg-gray-50 transition-colors mr-auto"
-                          >
-                            <MessageSquare className="w-4 h-4 mr-2" /> Discuss with Client
-                          </button>
+                    <div className="p-5 md:p-6 bg-white border-t border-gray-100 flex flex-col gap-3 flex-shrink-0 z-10 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.05)]">
+                      
+                      {showRejectInput && (
+                        <div className="mb-2 animate-in slide-in-from-bottom-2">
+                          <label className="text-[12px] font-bold text-red-600 block mb-2">Reason for Rejection *</label>
+                          <textarea 
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            placeholder="Explain exactly what the developer needs to fix or add..." 
+                            className="w-full p-4 bg-red-50 border border-red-200 rounded-xl text-[14px] text-red-900 outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all h-24 resize-none placeholder-red-300"
+                            autoFocus
+                          />
+                        </div>
+                      )}
 
-                          <button 
-                            onClick={() => handleUpdateStatus('Rejected')}
-                            disabled={updatingStatus !== null}
-                            className="flex items-center justify-center px-6 py-3.5 rounded-xl border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 text-[13px] font-bold transition-colors active:scale-95 disabled:opacity-50"
-                          >
-                            {updatingStatus === 'Rejected' ? <><Loader2 className="w-4 h-4 animate-spin mr-2"/> Rejecting...</> : <><X className="w-4 h-4 mr-2" /> Reject Change</>}
-                          </button>
-                          
-                          <button 
-                            onClick={() => handleUpdateStatus('Approved')}
-                            disabled={updatingStatus !== null}
-                            className="flex items-center justify-center px-8 py-3.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-[14px] font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 gap-2" 
-                          >
-                            {updatingStatus === 'Approved' ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Approving...</> : <><Check className="w-5 h-5" /> Approve Change Request</>}
-                          </button>
-                        </>
-                      ) : selectedCR.status === 'In Development' ? (
-                        <div className="w-full flex justify-center items-center py-2">
-                           <p className="text-[14px] font-bold text-blue-600 flex items-center gap-2 bg-blue-50 px-6 py-3 rounded-xl border border-blue-100 w-full justify-center">
-                             <Loader2 className="w-4 h-4 animate-spin" />
-                             Waiting for developers to submit new evidence...
-                           </p>
-                        </div>
-                      ) : selectedCR.status === 'Pending Verification' ? (
-                         <div className="w-full flex justify-between items-center py-2 bg-green-50 px-6 rounded-xl border border-green-100">
-                           <p className="text-[14px] font-bold text-green-700 flex items-center gap-2">
-                             <CheckCircle2 className="w-5 h-5" />
-                             Developer has submitted new evidence!
-                           </p>
-                           <button 
-                             onClick={() => navigate('/ba/verification')}
-                             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white text-[13px] font-bold rounded-xl shadow-sm transition-all active:scale-95"
-                           >
-                             Go to Verification Queue
-                           </button>
-                         </div>
-                      ) : selectedCR.status === 'Rejected by BA' ? (
-                        <div className="w-full flex justify-center items-center py-2">
-                           <p className="text-[14px] font-bold text-red-600 flex items-center gap-2 bg-red-50 px-6 py-3 rounded-xl border border-red-100 w-full justify-center">
-                             <AlertTriangle className="w-4 h-4" />
-                             Rejected. Waiting for the client to review your decision.
-                           </p>
-                        </div>
-                      ) : null}
+                      <div className="flex justify-end gap-3 w-full">
+                        {selectedCR.status === 'Pending' ? (
+                          <>
+                            <button 
+                              onClick={() => navigate('/ba/communication', { state: { activeReqId: selectedCR.reqId } })}
+                              disabled={updatingStatus !== null}
+                              className="flex items-center justify-center px-6 py-3.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-bold hover:bg-gray-50 transition-colors mr-auto"
+                            >
+                              <MessageSquare className="w-4 h-4 mr-2" /> Discuss with Client
+                            </button>
+
+                            <button 
+                              onClick={() => handleUpdateStatus('Rejected')}
+                              disabled={updatingStatus !== null}
+                              className="flex items-center justify-center px-6 py-3.5 rounded-xl border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 text-[13px] font-bold transition-colors active:scale-95 disabled:opacity-50"
+                            >
+                              {updatingStatus === 'Rejected' ? <><Loader2 className="w-4 h-4 animate-spin mr-2"/> Rejecting...</> : <><X className="w-4 h-4 mr-2" /> Reject Change</>}
+                            </button>
+                            
+                            <button 
+                              onClick={() => handleUpdateStatus('Approved')}
+                              disabled={updatingStatus !== null}
+                              className="flex items-center justify-center px-8 py-3.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-[14px] font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 gap-2" 
+                            >
+                              {updatingStatus === 'Approved' ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Approving...</> : <><Check className="w-5 h-5" /> Approve Change Request</>}
+                            </button>
+                          </>
+                        ) : selectedCR.status === 'In Development' ? (
+                          <div className="w-full flex justify-center items-center py-2">
+                             <p className="text-[14px] font-bold text-blue-600 flex items-center gap-2 bg-blue-50 px-6 py-3 rounded-xl border border-blue-100 w-full justify-center">
+                               <Loader2 className="w-4 h-4 animate-spin" />
+                               Waiting for developers to submit new evidence...
+                             </p>
+                          </div>
+                        ) : selectedCR.status === 'Pending Verification' ? (
+                           <div className="w-full flex justify-between items-center py-2 bg-green-50 px-6 rounded-xl border border-green-100">
+                             <p className="text-[14px] font-bold text-green-700 flex items-center gap-2">
+                               <CheckCircle2 className="w-5 h-5" />
+                               Developer has submitted new evidence!
+                             </p>
+                             <button 
+                               onClick={() => navigate('/ba/verification')}
+                               className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white text-[13px] font-bold rounded-xl shadow-sm transition-all active:scale-95"
+                             >
+                               Go to Verification Queue
+                             </button>
+                           </div>
+                        ) : selectedCR.status === 'Rejected by BA' ? (
+                          <div className="w-full flex justify-center items-center py-2">
+                             <p className="text-[14px] font-bold text-red-600 flex items-center gap-2 bg-red-50 px-6 py-3 rounded-xl border border-red-100 w-full justify-center">
+                               <AlertTriangle className="w-4 h-4" />
+                               Rejected. Waiting for the client to review your decision.
+                             </p>
+                          </div>
+                        ) : null}
+                      </div>
+
                     </div>
 
                   </>

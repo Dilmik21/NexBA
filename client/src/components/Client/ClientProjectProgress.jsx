@@ -14,7 +14,6 @@ export default function ClientProjectProgress() {
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // Fetch progress data exactly ONCE when the user logs in
         fetchProgress(user.uid, true); 
       } else {
         setIsLoading(false);
@@ -39,27 +38,47 @@ export default function ClientProjectProgress() {
     }
   };
 
+  // --- THE FULLY UPDATED DYNAMIC PHASE MAPPING ---
   const getStageDetails = (stage) => {
     const s = stage?.toLowerCase() || "";
     
-    if (s.includes("pending") || s.includes("review")) 
-      return { badgeBg: "bg-orange-100", badgeText: "text-orange-600", barColor: "bg-orange-500", progress: 0 };
+    // Phase 1: Initiation & Analysis
+    if (s === "pending ba review") 
+      return { badgeBg: "bg-gray-100", badgeText: "text-gray-600", barColor: "bg-gray-400", progress: 10, displayStage: "Initiated" };
+    
     if (s.includes("analysis")) 
-      return { badgeBg: "bg-yellow-100", badgeText: "text-yellow-700", barColor: "bg-yellow-500", progress: 15 };
+      return { badgeBg: "bg-yellow-100", badgeText: "text-yellow-700", barColor: "bg-yellow-500", progress: 20, displayStage: "Analysis" };
+    
     if (s.includes("clarification")) 
-      return { badgeBg: "bg-red-100", badgeText: "text-red-600", barColor: "bg-red-500", progress: 15 };
-    if (s.includes("ready")) 
-      return { badgeBg: "bg-indigo-100", badgeText: "text-indigo-600", barColor: "bg-indigo-500", progress: 25 };
-    if (s.includes("develop")) 
-      return { badgeBg: "bg-blue-100", badgeText: "text-blue-600", barColor: "bg-blue-500", progress: 50 };
-    if (s.includes("change") || s.includes("modification")) 
-      return { badgeBg: "bg-amber-100", badgeText: "text-amber-600", barColor: "bg-amber-500", progress: 75 };
-    if (s.includes("uat") || s.includes("verif")) 
-      return { badgeBg: "bg-purple-100", badgeText: "text-purple-600", barColor: "bg-purple-500", progress: 90 };
-    if (s.includes("complete") || s.includes("live") || s.includes("approved")) 
-      return { badgeBg: "bg-green-100", badgeText: "text-green-600", barColor: "bg-green-500", progress: 100 };
+      return { badgeBg: "bg-red-100", badgeText: "text-red-600", barColor: "bg-red-500", progress: 20, displayStage: "Paused: Client Input" };
+
+    // Phase 2: Engineering & Development
+    if (s.includes("sent to engineering")) 
+      return { badgeBg: "bg-blue-100", badgeText: "text-blue-600", barColor: "bg-blue-400", progress: 30, displayStage: "Queued for Dev" };
       
-    return { badgeBg: "bg-gray-100", badgeText: "text-gray-600", barColor: "bg-gray-400", progress: 0 };
+    if (s.includes("in progress")) 
+      return { badgeBg: "bg-blue-100", badgeText: "text-blue-800", barColor: "bg-blue-600", progress: 50, displayStage: "Development" };
+
+    // Phase 3: Internal Review (BA Verification)
+    if (s.includes("ready for review")) 
+      return { badgeBg: "bg-teal-100", badgeText: "text-teal-700", barColor: "bg-teal-500", progress: 70, displayStage: "Dev Complete" };
+
+    if (s.includes("pending verification") || s.includes("awaiting verification")) 
+      return { badgeBg: "bg-purple-100", badgeText: "text-purple-700", barColor: "bg-purple-500", progress: 80, displayStage: "Internal Review" };
+
+    // Phase 4: Client Review (UAT) & Changes
+    if (s.includes("change requested") || s.includes("modification requested")) 
+      return { badgeBg: "bg-orange-100", badgeText: "text-orange-700", barColor: "bg-orange-500", progress: 85, displayStage: "Revising Scope" };
+
+    if (s.includes("uat") || s.includes("pending approval")) 
+      return { badgeBg: "bg-indigo-100", badgeText: "text-indigo-700", barColor: "bg-indigo-500", progress: 90, displayStage: "Ready for UAT" };
+
+    // Phase 5: Completion
+    if (s.includes("complete") || s.includes("done") || s.includes("approved") || s.includes("live")) 
+      return { badgeBg: "bg-green-100", badgeText: "text-green-700", barColor: "bg-green-500", progress: 100, displayStage: "Completed" };
+      
+    // Fallback
+    return { badgeBg: "bg-gray-100", badgeText: "text-gray-600", barColor: "bg-gray-400", progress: 0, displayStage: stage || "Unknown" };
   };
 
   return (
@@ -86,7 +105,10 @@ export default function ClientProjectProgress() {
           </div>
         ) : (
           progressData.requirements.map((req, index) => {
-            const { badgeBg, badgeText, barColor, progress: mappedProgress } = getStageDetails(req.stage);
+            const { badgeBg, badgeText, barColor, progress: mappedProgress, displayStage } = getStageDetails(req.stage || req.status);
+            
+            // Note: If the backend provides a specific calculated progress (like 65%), we use it. 
+            // Otherwise, we fallback to our exact mapped phase logic.
             const displayProgress = (typeof req.progress === 'number' && req.progress > 0) ? req.progress : mappedProgress;
             
             return (
@@ -94,7 +116,7 @@ export default function ClientProjectProgress() {
                 
                 {/* Left Side: ID and Title */}
                 <div className="w-full md:w-1/3 min-w-0 pr-2">
-                  <p className="text-[10px] md:text-[11px] font-bold text-gray-400 uppercase tracking-wider">{req.id}</p>
+                  <p className="text-[10px] md:text-[11px] font-bold text-gray-400 uppercase tracking-wider">{req.id || req.reqId}</p>
                   <p className="text-[13px] md:text-sm font-semibold text-navy mt-0.5 truncate">{req.title}</p>
                 </div>
 
@@ -104,7 +126,7 @@ export default function ClientProjectProgress() {
                   {/* Status Badge */}
                   <div className="flex-shrink-0 w-full sm:w-36 md:w-40">
                     <span className={`text-[10px] md:text-[11px] font-bold px-3 py-1.5 rounded-md block text-center whitespace-nowrap ${badgeBg} ${badgeText}`}>
-                      {req.stage}
+                      {displayStage}
                     </span>
                   </div>
 

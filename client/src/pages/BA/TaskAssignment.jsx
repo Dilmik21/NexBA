@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
@@ -28,6 +28,9 @@ export default function TaskAssignment() {
   
   const [manualForm, setManualForm] = useState({ title: '', priority: 'Medium', requiredRole: 'Full-stack Developer' });
 
+  // --- NEW: Identify Completed Statuses ---
+  const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
+
   useEffect(() => {
     if (currentUser?.uid) {
       fetchInitialData();
@@ -46,7 +49,6 @@ export default function TaskAssignment() {
           const updatedReq = reqsJson.data.find(r => r.id === selectedReq.id);
           if (updatedReq) {
             setSelectedReq(updatedReq);
-            // Don't set tasks here, let the selection handler do it
           }
         }
       }
@@ -63,21 +65,13 @@ export default function TaskAssignment() {
     } catch (error) { console.error("Error fetching leaders:", error); }
   };
 
-  // --- NEW: Fetch tasks directly when a requirement is selected ---
   const fetchTasksForRequirement = async (reqId) => {
     setIsFetchingTasks(true);
     try {
-      // Note: You need a backend route to fetch tasks by reqId if you don't have one.
-      // Assuming you might not, we will rely on the initial fetch if available, 
-      // but ensure the view mode is set correctly even if tasks are empty.
-      
-      // Temporary fallback: If tasks are attached, use them.
       const targetReq = requirements.find(r => r.id === reqId);
       const tasksToSet = targetReq?.tasks || [];
-      
       setGeneratedTasks(tasksToSet);
       return tasksToSet;
-
     } catch (error) {
       console.error("Error fetching specific tasks:", error);
       return [];
@@ -146,7 +140,6 @@ export default function TaskAssignment() {
 
       setManualForm({ title: '', priority: 'Medium', requiredRole: 'Full-stack Developer' });
       await fetchInitialData();
-      // Re-fetch tasks after manual addition
       if (selectedReq) await fetchTasksForRequirement(selectedReq.id);
       setViewMode('ai'); 
     } catch (error) { console.error("Assignment failed:", error); } 
@@ -231,6 +224,15 @@ export default function TaskAssignment() {
   const isAssigned = selectedReq ? assignedStatuses.includes(selectedReq.status) : false;
   const pendingTaskCount = generatedTasks.filter(t => t.status === 'Unassigned').length;
 
+  // --- NEW: Sort Requirements so Completed are at the bottom ---
+  const sortedRequirements = [...requirements].sort((a, b) => {
+    const aFinished = finishedStatuses.includes(a.status);
+    const bFinished = finishedStatuses.includes(b.status);
+    if (aFinished && !bFinished) return 1;
+    if (!aFinished && bFinished) return -1;
+    return a.id.localeCompare(b.id); // Sort alphabetically otherwise
+  });
+
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
       <BATopBar />
@@ -244,7 +246,7 @@ export default function TaskAssignment() {
           
           <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4 md:gap-0">
             <div>
-              <h1 className="text-[22px] font-bold text-navy">Task Generation & Backlog</h1>
+              <h1 className="text-[22px] font-bold text-navy">Task Assignment</h1>
               <p className="text-sm text-gray-500 mt-1">Generate technical tasks and forward the backlog to an Engineering Team.</p>
             </div>
             
@@ -265,19 +267,30 @@ export default function TaskAssignment() {
                     <FileText className="w-3.5 h-3.5 mr-2" /> Available Requirements
                   </div>
                   <div className="max-h-[300px] overflow-y-auto">
-                    {requirements.length === 0 ? (
+                    {sortedRequirements.length === 0 ? (
                       <div className="px-5 py-4 text-sm text-gray-500 text-center">No requirements found.</div>
                     ) : (
-                      requirements.map(req => (
-                        <div 
-                          key={req.id}
-                          onClick={() => handleSelectRequirement(req)}
-                          className={`px-5 py-3 hover:bg-blue-50 cursor-pointer transition-colors ${selectedReq?.id === req.id ? 'bg-blue-50/50 border-l-[3px] border-primary' : 'border-l-[3px] border-transparent'}`}
-                        >
-                          <p className={`text-sm font-bold truncate ${selectedReq?.id === req.id ? 'text-primary' : 'text-navy'}`}>{req.id}</p>
-                          <p className="text-xs text-gray-500 truncate mt-0.5">{req.title}</p>
-                        </div>
-                      ))
+                      sortedRequirements.map(req => {
+                        const isCompleted = finishedStatuses.includes(req.status);
+                        return (
+                          <div 
+                            key={req.id}
+                            onClick={() => handleSelectRequirement(req)}
+                            className={`px-5 py-3 hover:bg-blue-50 cursor-pointer transition-colors ${selectedReq?.id === req.id ? 'bg-blue-50/50 border-l-[3px] border-primary' : 'border-l-[3px] border-transparent'}`}
+                          >
+                            <div className="flex justify-between items-start mb-0.5">
+                              <p className={`text-sm font-bold truncate ${selectedReq?.id === req.id ? 'text-primary' : 'text-navy'}`}>{req.id}</p>
+                              {/* --- COMPLETED BADGE --- */}
+                              {isCompleted && (
+                                <span className="bg-green-50 text-green-600 border border-green-200 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                  Completed
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 truncate mt-0.5">{req.title}</p>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>

@@ -143,160 +143,175 @@ export default function ClientClarifications() {
     return `${Math.floor(diffInHours / 24)} days ago`;
   };
 
+  // VIBRANT COLOR BADGES
   const getPriorityBadge = (priority) => {
     const p = priority || 'Medium'; 
-    if (p === 'Urgent' || p === 'High') return <span className="bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded">High</span>;
-    if (p === 'Medium') return <span className="bg-yellow-50 text-yellow-600 text-[10px] font-bold px-2 py-0.5 rounded">Medium</span>;
-    return <span className="bg-gray-50 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded">Low</span>;
+    if (p === 'Urgent' || p === 'High') return <span className="bg-red-50 text-red-600 border border-red-100 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">High</span>;
+    if (p === 'Medium') return <span className="bg-yellow-50 text-yellow-600 border border-yellow-100 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">Medium</span>;
+    return <span className="bg-green-50 text-green-600 border border-green-100 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">Low</span>;
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA]">
-      <ClientTopBar />
+    <>
+      <style>{`
+        /* Custom Padded Scrollbar */
+        .custom-scrollbar { scrollbar-width: thin; scrollbar-color: #cbd5e1 #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 8px; margin-block: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; border: 2px solid #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}</style>
 
-      <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
-        <div className="hidden lg:block flex-shrink-0">
-          <ClientSidebar />
-        </div>
+      <div className="min-h-screen bg-[#F5F7FA]">
+        <ClientTopBar />
 
-        <div className="flex-1 pb-10 flex flex-col h-full lg:h-[calc(100vh-100px)]">
-          <div className="mb-6 flex-shrink-0">
-            <h1 className="text-[22px] font-bold text-navy">Clarifications</h1>
-            <p className="text-gray-500 mt-1 text-[13px]">
-              {questions.length} pending clarification(s) requires your input.
-            </p>
+        <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
+          <div className="hidden lg:block flex-shrink-0">
+            <ClientSidebar />
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-6 flex-1 lg:min-h-0">
-            
-            {/* LEFT LIST PANE */}
-            <div className="w-full lg:w-[350px] bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-shrink-0 h-[350px] lg:h-auto">
-              <div className="p-5 border-b border-gray-50 font-bold text-[13px] text-gray-500 bg-gray-50/30 uppercase tracking-widest">
-                Pending Actions ({questions.length})
-              </div>
-              
-              <div className="overflow-y-auto flex-1 p-2 space-y-1">
-                {isLoading ? (
-                  <div className="p-8 text-center text-gray-400 flex flex-col items-center">
-                    <Loader2 className="w-6 h-6 animate-spin mb-2 text-primary" />
-                    <p className="text-sm">Fetching queries...</p>
-                  </div>
-                ) : questions.length === 0 ? (
-                  <div className="p-8 text-center text-gray-400 h-full flex flex-col items-center justify-center">
-                    <CheckCircle2 className="w-12 h-12 mb-4 text-primary opacity-30" />
-                    <p className="font-bold text-navy text-sm">All Resolved!</p>
-                    <p className="text-[11px] mt-1">There are no questions waiting for you.</p>
-                  </div>
-                ) : (
-                  questions.map(q => (
-                    <div 
-                      key={q.id}
-                      onClick={() => handleSelect(q)}
-                      className={`p-4 rounded-2xl cursor-pointer transition-all border ${selectedQuestion?.id === q.id ? 'bg-white shadow-md border-transparent ring-1 ring-black/5' : 'border-transparent hover:bg-gray-50'}`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[11px] font-bold text-gray-400">{q.reqId}</span>
-                          <span className="bg-blue-50 text-primary text-[9px] font-bold px-1.5 py-0.5 rounded">BA</span>
-                        </div>
-                        {getPriorityBadge(q.priority)}
-                      </div>
-                      <h4 className={`font-bold text-[13px] truncate mb-1 ${selectedQuestion?.id === q.id ? 'text-navy' : 'text-gray-600'}`}>{q.title}</h4>
-                      <p className="text-[10px] text-gray-400">{timeAgo(q.createdAt)}</p>
-                    </div>
-                  ))
-                )}
-              </div>
+          <div className="flex-1 pb-10 flex flex-col h-full lg:h-[calc(100vh-100px)]">
+            <div className="mb-6 flex-shrink-0">
+              <h1 className="text-[22px] font-bold text-navy">Clarifications</h1>
+              <p className="text-gray-500 mt-1 text-[13px]">
+                {questions.length} pending clarification(s) requires your input.
+              </p>
             </div>
 
-            {/* RIGHT DETAIL PANE */}
-            {selectedQuestion ? (
-              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col min-h-[500px] lg:min-h-0 overflow-hidden">
-                <div className="p-6 md:p-8 border-b border-gray-50 bg-white">
-                  <div className="flex items-center space-x-3 mb-3">
-                    <span className="text-[11px] font-bold text-gray-400">{selectedQuestion.reqId}</span>
-                    {getPriorityBadge(selectedQuestion.priority)}
-                  </div>
-                  <h2 className="text-[20px] font-bold text-navy mb-1">{selectedQuestion.title}</h2>
-                  <p className="text-[12px] text-gray-400 font-medium">Inquiry from {selectedQuestion.baName}</p>
+            <div className="flex flex-col lg:flex-row gap-6 flex-1 lg:min-h-0">
+              
+              {/* LEFT LIST PANE */}
+              <div className="w-full lg:w-[350px] bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-shrink-0 h-[350px] lg:h-auto">
+                <div className="p-5 border-b border-gray-50 font-bold text-[13px] text-gray-500 bg-gray-50/30 uppercase tracking-widest">
+                  Pending Actions ({questions.length})
                 </div>
-
-                <div className="p-6 md:p-8 flex-1 overflow-y-auto bg-[#F8FAFC]/50 space-y-8">
-                  <div>
-                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Requirement Context</h3>
-                    <div className="bg-white p-5 rounded-2xl text-gray-500 text-[13px] leading-relaxed border border-gray-100 shadow-sm italic">
-                      "{selectedQuestion.regarding}"
+                
+                <div className="overflow-y-auto flex-1 p-3 space-y-2 custom-scrollbar">
+                  {isLoading ? (
+                    <div className="p-8 text-center text-gray-400 flex flex-col items-center">
+                      <Loader2 className="w-6 h-6 animate-spin mb-2 text-[#007BFF]" />
+                      <p className="text-sm">Fetching queries...</p>
                     </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border-l-[4px] border-l-primary shadow-sm flex items-start">
-                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center mr-4 flex-shrink-0">
-                       <User className="w-5 h-5 text-primary" />
+                  ) : questions.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400 h-full flex flex-col items-center justify-center">
+                      <CheckCircle2 className="w-12 h-12 mb-4 text-[#007BFF] opacity-30" />
+                      <p className="font-bold text-navy text-sm">All Resolved!</p>
+                      <p className="text-[11px] mt-1">There are no questions waiting for you.</p>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-bold text-navy">{selectedQuestion.baName}</span>
-                        <span className="text-[10px] bg-blue-50 text-primary px-2 py-0.5 rounded font-bold uppercase">BA Question</span>
-                      </div>
-                      <p className="text-sm text-navy font-medium leading-relaxed">{selectedQuestion.question}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Your Response</h3>
-                    <div className="bg-white border border-gray-200 rounded-[1.5rem] overflow-hidden focus-within:ring-4 focus-within:ring-primary/5 transition-all">
-                      <textarea 
-                        value={answerText}
-                        onChange={(e) => setAnswerText(e.target.value)}
-                        placeholder="Provide your feedback or answer here..."
-                        className="w-full h-36 p-6 text-sm text-navy resize-none outline-none placeholder-gray-400 bg-transparent"
-                      />
-                      
-                      {attachedFile && (
-                        <div className="mx-6 mb-4 p-3 bg-blue-50 rounded-xl flex items-center justify-between border border-blue-100">
-                          <div className="flex items-center text-xs font-bold text-primary">
-                            <FileText className="w-4 h-4 mr-2" />
-                            <span className="truncate max-w-[200px]">{attachedFile.name}</span>
+                  ) : (
+                    questions.map(q => (
+                      <div 
+                        key={q.id}
+                        onClick={() => handleSelect(q)}
+                        className={`p-4 rounded-2xl cursor-pointer transition-all border-l-[4px] ${
+                          selectedQuestion?.id === q.id 
+                            ? 'bg-blue-50/40 border-l-[#007BFF] border-y-transparent border-r-transparent shadow-sm' 
+                            : 'border-transparent hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-[11px] font-bold ${selectedQuestion?.id === q.id ? 'text-[#007BFF]' : 'text-gray-400'}`}>{q.reqId}</span>
+                            <span className="bg-blue-50 text-[#007BFF] border border-blue-100 text-[9px] font-bold px-1.5 py-0.5 rounded-md">BA</span>
                           </div>
-                          {/* UPDATED: Uses the safe remove function */}
-                          <button onClick={removeAttachment} className="p-1 hover:text-red-500"><X className="w-4 h-4" /></button>
+                          {getPriorityBadge(q.priority)}
                         </div>
-                      )}
+                        <h4 className={`font-bold text-[13px] truncate mb-1 ${selectedQuestion?.id === q.id ? 'text-navy' : 'text-gray-600'}`}>{q.title}</h4>
+                        <p className="text-[10px] text-gray-400">{timeAgo(q.createdAt)}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
 
-                      <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-                        <button 
-                          onClick={() => fileInputRef.current.click()}
-                          className="flex items-center text-xs font-bold text-gray-500 hover:text-primary"
-                        >
-                          <Paperclip className="w-4 h-4 mr-2" /> Attach File
-                        </button>
-                        <button 
-                          onClick={handleSendAnswer}
-                          disabled={!answerText.trim() || isSubmitting}
-                          className="w-full sm:w-auto bg-primary text-white text-xs font-bold px-8 py-3 rounded-full shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center disabled:opacity-50"
-                        >
-                          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />} 
-                          Send Answer
-                        </button>
+              {/* RIGHT DETAIL PANE */}
+              {selectedQuestion ? (
+                <div className="flex-1 bg-white rounded-[24px] border border-gray-100 shadow-sm flex flex-col min-h-[500px] lg:min-h-0 overflow-hidden">
+                  <div className="p-6 md:p-8 border-b border-gray-50 bg-white flex-shrink-0">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest">{selectedQuestion.reqId}</span>
+                      {getPriorityBadge(selectedQuestion.priority)}
+                    </div>
+                    <h2 className="text-[20px] md:text-[24px] font-black text-navy mb-1">{selectedQuestion.title}</h2>
+                    <p className="text-[12px] text-gray-400 font-medium">Inquiry from <strong className="text-[#007BFF]">{selectedQuestion.baName}</strong></p>
+                  </div>
+
+                  <div className="p-6 md:p-8 flex-1 overflow-y-auto bg-[#FAFAFA] space-y-8 custom-scrollbar pr-4">
+                    <div>
+                      <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Requirement Context</h3>
+                      <div className="bg-white p-5 rounded-2xl text-gray-600 text-[13px] leading-relaxed border border-gray-200 shadow-sm whitespace-pre-wrap">
+                        "{selectedQuestion.regarding}"
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm flex items-start ring-1 ring-blue-50">
+                      <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 shadow-sm">
+                         <User className="w-6 h-6 text-[#007BFF]" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-bold text-navy">{selectedQuestion.baName}</span>
+                          <span className="text-[9px] bg-blue-50 border border-blue-100 text-[#007BFF] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">BA Question</span>
+                        </div>
+                        <p className="text-[14px] text-navy font-medium leading-relaxed">{selectedQuestion.question}</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4">Your Response</h3>
+                      <div className="bg-white border border-gray-200 rounded-[1.5rem] overflow-hidden focus-within:ring-4 focus-within:ring-[#007BFF]/10 focus-within:border-[#007BFF] transition-all shadow-sm">
+                        <textarea 
+                          value={answerText}
+                          onChange={(e) => setAnswerText(e.target.value)}
+                          placeholder="Provide your feedback or answer here..."
+                          className="w-full h-40 p-6 text-[14px] text-navy resize-none outline-none placeholder-gray-400 bg-transparent"
+                        />
+                        
+                        {attachedFile && (
+                          <div className="mx-6 mb-4 p-3 bg-blue-50/50 rounded-xl flex items-center justify-between border border-blue-100">
+                            <div className="flex items-center text-xs font-bold text-[#007BFF]">
+                              <FileText className="w-4 h-4 mr-2" />
+                              <span className="truncate max-w-[200px] md:max-w-md">{attachedFile.name}</span>
+                            </div>
+                            <button onClick={removeAttachment} className="p-1.5 text-gray-400 hover:bg-white hover:text-red-500 rounded-lg transition-colors"><X className="w-4 h-4" /></button>
+                          </div>
+                        )}
+
+                        <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                          <button 
+                            onClick={() => fileInputRef.current.click()}
+                            className="flex items-center text-[13px] font-bold text-gray-500 hover:text-[#007BFF] transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm"
+                          >
+                            <Paperclip className="w-4 h-4 mr-2" /> Attach File
+                          </button>
+                          <button 
+                            onClick={handleSendAnswer}
+                            disabled={!answerText.trim() || isSubmitting}
+                            className="w-full sm:w-auto bg-[#007BFF] text-white text-[13px] font-bold px-8 py-3 rounded-xl shadow-md hover:bg-blue-600 active:scale-95 transition-all flex items-center justify-center disabled:opacity-50"
+                          >
+                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />} 
+                            Send Answer
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex-1 bg-white rounded-[24px] border border-gray-100 flex flex-col items-center justify-center text-gray-400 p-12">
-                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-primary mb-6">
-                   {hasHistory ? <CheckCircle2 className="w-10 h-10" /> : <MessageSquare className="w-10 h-10" />}
+              ) : (
+                <div className="flex-1 bg-white rounded-[24px] border border-gray-100 flex flex-col items-center justify-center text-gray-400 p-12 shadow-sm">
+                  <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-[#007BFF] mb-6 shadow-sm">
+                     {hasHistory ? <CheckCircle2 className="w-10 h-10" /> : <MessageSquare className="w-10 h-10" />}
+                  </div>
+                  <h3 className="font-bold text-navy text-xl">Inbox Clean</h3>
+                  <p className="text-sm text-gray-500 text-center max-w-xs mt-2">No pending clarifications found. Your project is moving forward smoothly!</p>
                 </div>
-                <h3 className="font-bold text-navy text-xl">Inbox Clean</h3>
-                <p className="text-sm text-gray-500 text-center max-w-xs mt-2">No pending clarifications found. Your project is moving forward smoothly!</p>
-              </div>
-            )}
-            
+              )}
+              
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

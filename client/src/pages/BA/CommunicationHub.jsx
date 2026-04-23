@@ -2,7 +2,65 @@ import { useState, useEffect, useRef } from "react";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { MessageSquare, Paperclip, Send, Loader2, User, Users, FileText, Link as LinkIcon, ArrowLeft, X } from "lucide-react";
+import { MessageSquare, Paperclip, Send, Loader2, User, Users, FileText, Link as LinkIcon, Download } from "lucide-react";
+
+// Shared Document Viewer Component
+const DocumentViewer = ({ fileName, fileData }) => {
+  const isImage = fileData?.startsWith('data:image') || fileName?.match(/\.(jpeg|jpg|gif|png)$/i) != null;
+  const isViewable = isImage || fileName?.match(/\.(pdf)$/i) != null;
+
+  if (!fileData) {
+      return (
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-gray-400" />
+                  <div>
+                      <p className="text-sm font-bold text-navy">{fileName}</p>
+                      <p className="text-[10px] text-gray-500">File content unavailable (Legacy project)</p>
+                  </div>
+              </div>
+          </div>
+      )
+  }
+
+  if (!isViewable) {
+      return (
+           <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0 pr-4">
+                  <FileText className="w-6 h-6 text-primary flex-shrink-0" />
+                  <div className="min-w-0">
+                      <p className="text-sm font-bold text-navy truncate">{fileName}</p>
+                      <p className="text-[10px] text-primary">Click download to view</p>
+                  </div>
+              </div>
+              <a href={fileData} download={fileName} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white rounded-full text-primary hover:bg-primary hover:text-white transition-colors shadow-sm">
+                  <Download className="w-4 h-4" />
+              </a>
+           </div>
+      )
+  }
+
+  return (
+      <div className="flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+          <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-2 min-w-0 pr-4">
+                  <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span className="text-xs font-bold text-navy truncate">{fileName}</span>
+              </div>
+              <a href={fileData} download={fileName} className="text-primary hover:text-blue-700 p-1 flex-shrink-0" title="Download">
+                  <Download className="w-4 h-4" />
+              </a>
+          </div>
+          <div className="h-[300px] w-full bg-gray-100 relative flex items-center justify-center">
+              {isImage ? (
+                  <img src={fileData} alt="Document" className="max-w-full max-h-full object-contain p-2" />
+              ) : (
+                  <iframe src={fileData} className="w-full h-full absolute inset-0" title="Document Viewer" />
+              )}
+          </div>
+      </div>
+  )
+}
 
 export default function CommunicationHub() {
   const { currentUser } = useAuth();
@@ -22,7 +80,6 @@ export default function CommunicationHub() {
   const fileInputRef = useRef(null);
   const chatEndRef = useRef(null);
 
-  // 1. Fetch the List of Projects
   useEffect(() => {
     const fetchReqList = async () => {
       try {
@@ -47,11 +104,9 @@ export default function CommunicationHub() {
     }
   }, [currentUser]);
 
-  // 2. FIXED: Fetch Messages (Polling every 5 seconds safely)
   useEffect(() => {
     if (!selectedReq?.id || !currentUser?.uid) return;
 
-    // Show loader ONLY when first switching to a chat, not during the 5s background poll
     setMessages([]); 
     setIsLoadingMessages(true);
 
@@ -65,17 +120,16 @@ export default function CommunicationHub() {
       } catch (error) {
         console.error("Failed to fetch messages:", error);
       } finally {
-        setIsLoadingMessages(false); // Turn off loader after the first fetch
+        setIsLoadingMessages(false);
       }
     };
 
-    fetchMessages(); // Fetch immediately
-    const interval = setInterval(fetchMessages, 5000); // Then silently fetch in background every 5s
+    fetchMessages(); 
+    const interval = setInterval(fetchMessages, 5000); 
     
     return () => clearInterval(interval);
   }, [selectedReq?.id, activeChannel, currentUser?.uid]);
 
-  // 3. FIXED: Mark as Read Logic (Separated so it doesn't cause infinite network requests)
   useEffect(() => {
     if (!selectedReq || !currentUser?.uid) return;
 
@@ -86,7 +140,6 @@ export default function CommunicationHub() {
         try {
           await fetch(`http://localhost:5000/api/ba/chat/${selectedReq.id}/${activeChannel}/read?uid=${currentUser.uid}`, { method: "PUT" });
           
-          // Update the UI to show 0 unread
           setReqList(prev => prev.map(req => req.id === selectedReq.id ? { ...req, [activeChannel === 'Client' ? 'unreadClient' : 'unreadDev']: 0 } : req));
           setSelectedReq(prev => ({ ...prev, [activeChannel === 'Client' ? 'unreadClient' : 'unreadDev']: 0 }));
         } catch (error) {
@@ -97,7 +150,6 @@ export default function CommunicationHub() {
     }
   }, [selectedReq, activeChannel, currentUser?.uid]);
 
-  // Auto-scroll to bottom of chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -190,7 +242,7 @@ export default function CommunicationHub() {
                   Active Projects
                 </h3>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
                 {isLoadingList ? (
                   <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                 ) : (reqList || []).length === 0 ? (
@@ -298,11 +350,30 @@ export default function CommunicationHub() {
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC]">
+                  <div className="flex-1 overflow-y-auto p-6 bg-[#F8FAFC] custom-scrollbar">
+                    
+                    {/* Requirement Context Block */}
+                    <div className="mb-8 border-b border-gray-200 pb-8">
+                       <h3 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wider">Requirement Context</h3>
+                       
+                       {selectedReq.description && selectedReq.description !== "No description provided." && (
+                          <div className="bg-white p-5 rounded-2xl text-navy text-sm leading-relaxed mb-4 border border-gray-200 shadow-sm whitespace-pre-wrap">
+                             {selectedReq.description}
+                          </div>
+                       )}
+
+                       {selectedReq.fileName && selectedReq.fileName !== "No file attached" && (
+                          <div className="mb-4">
+                             <DocumentViewer fileName={selectedReq.fileName} fileData={selectedReq.fileData} />
+                          </div>
+                       )}
+                    </div>
+
+                    {/* Messages Area */}
                     {isLoadingMessages ? (
                        <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                     ) : messages.length === 0 ? (
-                       <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                       <div className="h-full flex flex-col items-center justify-center text-gray-400 py-10">
                          <MessageSquare className="w-12 h-12 mb-3 opacity-30" />
                          <p className="font-medium text-sm">No messages yet. Start the conversation!</p>
                        </div>
@@ -383,7 +454,7 @@ export default function CommunicationHub() {
                     <button 
                       type="button" 
                       onClick={() => fileInputRef.current.click()}
-                      className={`p-3.5 rounded-xl transition-colors ${attachedFile ? 'bg-blue-50 text-primary' : 'bg-gray-50 text-gray-400 hover:text-primary hover:bg-blue-50'}`}
+                      className={`p-3.5 rounded-xl transition-colors flex-shrink-0 ${attachedFile ? 'bg-blue-50 text-primary' : 'bg-gray-50 text-gray-400 hover:text-primary hover:bg-blue-50'}`}
                       title="Attach File"
                     >
                       <Paperclip className="w-5 h-5" />
@@ -402,7 +473,7 @@ export default function CommunicationHub() {
                     <button 
                       type="submit"
                       disabled={isSending || (!inputText.trim() && !attachedFile)}
-                      className="p-3.5 rounded-xl bg-primary hover:bg-blue-600 text-white transition-colors disabled:opacity-50 flex items-center justify-center shadow-sm"
+                      className="p-3.5 rounded-xl bg-primary hover:bg-blue-600 text-white transition-colors disabled:opacity-50 flex items-center justify-center shadow-sm flex-shrink-0"
                     >
                       {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                     </button>
@@ -411,7 +482,8 @@ export default function CommunicationHub() {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-[#F8FAFC]">
                    <MessageSquare className="w-12 h-12 mb-4 opacity-30" />
-                   <p className="font-medium">Select a project to view communication</p>
+                   <p className="font-medium text-navy text-lg">Select a project</p>
+                   <p className="text-sm mt-1 text-center px-4 max-w-sm">Choose a project from the left to contact the Client or Developer.</p>
                 </div>
               )}
             </div>

@@ -3,9 +3,68 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { FileText, File as FileIcon, Sparkles, X, Send, AlertTriangle, CheckCircle2, ChevronDown, Plus, Loader2, Edit3, Save, User, History, MessageSquare, Inbox, Paperclip, RefreshCw } from "lucide-react";
+import { FileText, Sparkles, X, Loader2, Inbox, RefreshCw, Download, Plus, ChevronDown, Edit3, Save } from "lucide-react";
 
-// Advanced Text Parser
+// --- Crash-Proof Document Viewer Component ---
+const DocumentViewer = ({ fileName, fileData }) => {
+  const safeName = fileName || "document.pdf";
+  const ext = safeName.split('.').pop().toLowerCase();
+  const isImage = fileData?.startsWith('data:image') || ['jpeg', 'jpg', 'gif', 'png'].includes(ext);
+  const isViewable = isImage || ext === 'pdf';
+
+  if (!fileData) {
+      return (
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-gray-400" />
+                  <div>
+                      <p className="text-sm font-bold text-navy">{safeName}</p>
+                      <p className="text-[10px] text-gray-500">File content unavailable (Legacy project)</p>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  if (!isViewable) {
+      return (
+           <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0 pr-4">
+                  <FileText className="w-6 h-6 text-primary flex-shrink-0" />
+                  <div className="min-w-0">
+                      <p className="text-sm font-bold text-navy truncate">{safeName}</p>
+                      <p className="text-[10px] text-primary">Click download to view</p>
+                  </div>
+              </div>
+              <a href={fileData} download={safeName} className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white rounded-full text-primary hover:bg-primary hover:text-white transition-colors shadow-sm">
+                  <Download className="w-4 h-4" />
+              </a>
+           </div>
+      );
+  }
+
+  return (
+      <div className="flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+          <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-2 min-w-0 pr-4">
+                  <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span className="text-xs font-bold text-navy truncate">{safeName}</span>
+              </div>
+              <a href={fileData} download={safeName} className="text-primary hover:text-blue-700 p-1 flex-shrink-0" title="Download">
+                  <Download className="w-4 h-4" />
+              </a>
+          </div>
+          <div className="h-[400px] w-full bg-gray-100 relative flex items-center justify-center">
+              {isImage ? (
+                  <img src={fileData} alt="Document" className="max-w-full max-h-full object-contain p-2" />
+              ) : (
+                  <iframe src={fileData} className="w-full h-full absolute inset-0" title="Document Viewer" />
+              )}
+          </div>
+      </div>
+  );
+}
+
 const HighlightedText = ({ text, terms }) => {
   if (!text) return <p className="text-gray-500 italic">No original text found in database for this requirement.</p>;
   
@@ -66,7 +125,10 @@ const getSafeValue = (val, fallback) => {
 export default function AIAnalysis() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser } = useAuth(); 
+  
+  // --- FIXED: Pulled in userData so we have access to the BA's name ---
+  const { currentUser, userData } = useAuth(); 
+  
   const reqId = searchParams.get("reqId");
 
   const [isLoading, setIsLoading] = useState(false);
@@ -90,7 +152,6 @@ export default function AIAnalysis() {
   const [historyList, setHistoryList] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // --- NEW: Identify Completed Statuses ---
   const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
 
   const fetchClarifications = async () => {
@@ -164,13 +225,10 @@ export default function AIAnalysis() {
 
   const handleRegenerate = async () => {
     if (!currentUser?.uid || !reqId) return;
-    
     setIsRegenerating(true);
-
     try {
       const response = await fetch(`http://localhost:5000/api/ba/analyze/${reqId}/regenerate?uid=${currentUser.uid}`, { method: "POST" });
       const json = await response.json();
-      
       if (json.success) {
         await processAI(reqId, true); 
       } else {
@@ -235,7 +293,14 @@ export default function AIAnalysis() {
     if (draftedQuestions.length === 0 || !currentUser?.uid) return;
     setIsSending(true);
     try {
-      const payload = { reqId: reqId, questions: draftedQuestions, uid: currentUser.uid };
+      // --- FIXED: Now sending baName in the payload! ---
+      const payload = { 
+        reqId: reqId, 
+        questions: draftedQuestions, 
+        uid: currentUser.uid,
+        baName: userData?.fullName || currentUser?.displayName || "Business Analyst" 
+      };
+      
       const response = await fetch("http://localhost:5000/api/ba/clarifications/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -244,7 +309,6 @@ export default function AIAnalysis() {
       const data = await response.json();
       if (data.success) {
         setDraftedQuestions([]); 
-        
         const freshAnswers = await fetchClarifications();
         setAiSuggestedQuestions(prev => prev.filter(aiQ => 
           !freshAnswers.some(sq => sq.question.trim().toLowerCase() === aiQ.trim().toLowerCase())
@@ -257,11 +321,9 @@ export default function AIAnalysis() {
     }
   };
 
-  const isFile = reqDetails?.type === 'File' || reqDetails?.fileName;
   const displayTitle = getSafeValue(reqDetails?.title, 'Untitled Requirement');
   const displayDesc = getSafeValue(aiData?.processedText, getSafeValue(reqDetails?.description, getSafeValue(reqDetails?.text, null)));
 
-  // --- NEW: Sort History so Completed are at the bottom ---
   const sortedHistory = [...historyList].sort((a, b) => {
     const aFinished = finishedStatuses.includes(a.status);
     const bFinished = finishedStatuses.includes(b.status);
@@ -306,7 +368,6 @@ export default function AIAnalysis() {
                         >
                           <div className="flex justify-between items-start mb-0.5">
                             <p className={`text-sm font-bold ${item.id === reqId ? 'text-primary' : 'text-navy'}`}>{item.id}</p>
-                            {/* --- COMPLETED BADGE --- */}
                             {isCompleted && (
                               <span className="bg-green-50 text-green-600 border border-green-200 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
                                 Completed
@@ -345,72 +406,82 @@ export default function AIAnalysis() {
           ) : (
             <div className="space-y-6">
               
+              {/* REQUIREMENT CONTEXT CARD */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-8">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                    <FileText className="w-4 h-4 mr-2 text-primary" /> {isFile ? 'Source Document & Extracted Text' : 'Original Content'}
+                    <FileText className="w-4 h-4 mr-2 text-primary" /> Provided Materials
                   </div>
                 </div>
 
-                {isFile && (
-                  <div className="mb-8 p-4 bg-[#F8FAFC] border border-gray-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center text-primary flex-shrink-0">
-                        <FileIcon className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-navy truncate max-w-[250px] md:max-w-[400px]">{reqDetails?.fileName || "Attached Document"}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5 uppercase tracking-wide font-medium">Client Uploaded File</p>
-                      </div>
-                    </div>
-                    {reqDetails?.fileUrl && (
-                      <a 
-                        href={reqDetails.fileUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="px-5 py-2.5 bg-white border border-gray-200 text-primary text-xs font-bold rounded-xl hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center"
-                      >
-                        Open Original File
-                      </a>
-                    )}
+                {reqDetails?.fileName && reqDetails.fileName !== "No file attached" && (
+                  <div className="mb-8">
+                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Attached Document</h4>
+                    <DocumentViewer fileName={reqDetails.fileName} fileData={reqDetails.fileUrl || reqDetails.fileData} />
                   </div>
                 )}
                 
-                {isFile && (
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">AI Extracted Text Analysis</p>
-                )}
-
-                <HighlightedText text={displayDesc} terms={aiData?.ambiguousTerms} />
-
-                {aiData?.ambiguousTerms && aiData.ambiguousTerms.length > 0 && (
-                  <div className="mt-8 flex items-center text-[12px] text-gray-400 font-medium">
-                    <div className="w-3.5 h-1.5 bg-orange-500 rounded-full mr-2 opacity-80"></div>
-                    Highlight indicate ambiguous terms — hover for AI suggestion
+                {displayDesc && displayDesc !== "No description provided." && (
+                  <div className="mb-4">
+                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Text Description & Analysis</h4>
+                    <HighlightedText text={displayDesc} terms={aiData?.ambiguousTerms} />
+                    
+                    {aiData?.ambiguousTerms && aiData.ambiguousTerms.length > 0 && (
+                      <div className="mt-6 flex items-center text-[12px] text-gray-400 font-medium">
+                        <div className="w-3.5 h-1.5 bg-orange-500 rounded-full mr-2 opacity-80"></div>
+                        Highlights indicate ambiguous terms — hover for AI suggestion
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
+              {/* AI RESULTS CARD - WITH EDIT BUTTONS */}
               <div className={`bg-white rounded-[2rem] shadow-sm border transition-all p-8 ${isEditingAI ? 'border-primary ring-4 ring-primary/5' : 'border-gray-100'}`}>
-                <div className="flex justify-between items-center mb-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                   <h3 className="font-bold text-navy text-lg">AI Results</h3>
-                  <div className="flex gap-3">
+                  
+                  <div className="flex flex-wrap gap-3">
                     {isEditingAI ? (
-                       <button onClick={handleSaveEdits} className="bg-green-500 text-white px-6 py-2 rounded-xl text-sm font-bold">Save Changes</button>
+                       <>
+                         <button onClick={() => { setIsEditingAI(false); setEditedAIData(aiData); }} className="bg-gray-50 text-gray-500 hover:bg-gray-100 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors">
+                           Cancel
+                         </button>
+                         <button onClick={handleSaveEdits} disabled={isSaving} className="bg-[#10B981] hover:bg-[#059669] text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center transition-colors disabled:opacity-50">
+                           {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} Save Changes
+                         </button>
+                       </>
                     ) : (
-                      <button onClick={handleRegenerate} disabled={isRegenerating} className="bg-primary text-white px-6 py-2 rounded-xl text-sm font-bold flex items-center">
-                        {isRegenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Sparkles className="w-4 h-4 mr-2"/>} Regenerate
-                      </button>
+                      <>
+                        <button onClick={() => setIsEditingAI(true)} className="bg-white border border-gray-200 text-navy hover:bg-gray-50 px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-colors flex items-center">
+                           <Edit3 className="w-4 h-4 mr-2" /> Edit Results
+                        </button>
+                        <button onClick={handleRegenerate} disabled={isRegenerating} className="bg-primary hover:bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-colors flex items-center disabled:opacity-50">
+                          {isRegenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Sparkles className="w-4 h-4 mr-2"/>} Regenerate
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
+
+                {isEditingAI && (
+                  <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-xl text-[13px] text-blue-800 flex items-center">
+                    <Edit3 className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <strong>Edit Mode Active:</strong> You can modify the text below. For lists, place each new item on a new line.
+                  </div>
+                )}
 
                 <div className="space-y-8">
                    <div>
                      <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Executive Summary</h4>
                      {isEditingAI ? (
-                       <textarea value={editedAIData.summary} onChange={(e) => setEditedAIData({...editedAIData, summary: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm min-h-[100px] outline-none" />
+                       <textarea 
+                         value={editedAIData?.summary || ""} 
+                         onChange={(e) => setEditedAIData({...editedAIData, summary: e.target.value})} 
+                         className="w-full bg-white border-2 border-gray-200 rounded-xl p-4 text-[14px] text-navy min-h-[100px] outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-inner" 
+                       />
                      ) : (
-                       <p className="text-sm text-navy leading-relaxed">{aiData?.summary || "No summary available."}</p>
+                       <p className="text-[14px] text-navy leading-relaxed">{aiData?.summary || "No summary available."}</p>
                      )}
                    </div>
 
@@ -418,11 +489,16 @@ export default function AIAnalysis() {
                       <div key={field}>
                         <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 capitalize">{field.replace(/([A-Z])/g, ' $1')}</h4>
                         {isEditingAI ? (
-                           <textarea value={Array.isArray(editedAIData[field]) ? editedAIData[field].join('\n') : ''} onChange={(e) => handleArrayChange(field, e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm min-h-[120px] outline-none" />
+                           <textarea 
+                             value={Array.isArray(editedAIData?.[field]) ? editedAIData[field].join('\n') : ''} 
+                             onChange={(e) => handleArrayChange(field, e.target.value)} 
+                             placeholder={`Enter each ${field.replace(/([A-Z])/g, ' $1').toLowerCase()} on a new line...`}
+                             className="w-full bg-white border-2 border-gray-200 rounded-xl p-4 text-[14px] text-navy min-h-[140px] outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-inner leading-relaxed" 
+                           />
                         ) : (
                           <ul className="space-y-3">
                             {aiData?.[field]?.map((item, i) => (
-                              <li key={i} className="flex items-start text-sm text-navy bg-gray-50/50 p-3 rounded-xl border border-gray-50">
+                              <li key={i} className="flex items-start text-[14px] text-navy bg-gray-50/50 p-3.5 rounded-xl border border-gray-50">
                                 <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 mr-3 flex-shrink-0" />{item}
                               </li>
                             ))}
@@ -433,15 +509,16 @@ export default function AIAnalysis() {
                 </div>
               </div>
 
+              {/* CLARIFICATIONS CARD */}
               <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
                  <h3 className="font-bold text-navy text-lg mb-8">Clarifications</h3>
                  <div className="grid md:grid-cols-2 gap-8">
                     <div className="space-y-4">
                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Suggestions</p>
                        {aiSuggestedQuestions.map((q, i) => (
-                         <div key={i} className="bg-purple-50/50 border border-purple-100 p-4 rounded-2xl flex justify-between items-center group">
-                            <p className="text-sm text-purple-900 font-medium">{q}</p>
-                            <button onClick={() => addAISuggestionToDraft(q)} className="p-2 bg-white text-purple-600 rounded-lg"><Plus className="w-4 h-4" /></button>
+                         <div key={i} className="bg-purple-50/50 border border-purple-100 p-4 rounded-2xl flex justify-between items-start group gap-4">
+                            <p className="text-sm text-purple-900 font-medium leading-relaxed">{q}</p>
+                            <button onClick={() => addAISuggestionToDraft(q)} className="p-2 bg-white text-purple-600 hover:bg-purple-600 hover:text-white transition-colors rounded-lg flex-shrink-0 shadow-sm"><Plus className="w-4 h-4" /></button>
                          </div>
                        ))}
                        {aiSuggestedQuestions.length === 0 && (
@@ -454,29 +531,30 @@ export default function AIAnalysis() {
                     <div className="space-y-4">
                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Draft Questions</p>
                        {draftedQuestions.map((q, i) => (
-                         <div key={i} className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl flex justify-between items-center">
-                            <p className="text-sm text-blue-900 font-medium">{q}</p>
-                            <button onClick={() => removeDraftedQuestion(i)} className="text-blue-300 hover:text-red-500"><X className="w-4 h-4" /></button>
+                         <div key={i} className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl flex justify-between items-start gap-4">
+                            <p className="text-sm text-blue-900 font-medium leading-relaxed">{q}</p>
+                            <button onClick={() => removeDraftedQuestion(i)} className="text-blue-400 hover:text-red-500 transition-colors p-1 flex-shrink-0"><X className="w-5 h-5" /></button>
                          </div>
                        ))}
                        <div className="relative">
-                          <input value={newQuestion} onChange={(e) => setNewQuestion(e.target.value)} onKeyDown={addCustomQuestion} placeholder="Add custom question..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm outline-none" />
-                          <button onClick={addCustomQuestion} className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold text-xs uppercase">Add</button>
+                          <input value={newQuestion} onChange={(e) => setNewQuestion(e.target.value)} onKeyDown={addCustomQuestion} placeholder="Add custom question..." className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 text-sm outline-none focus:border-primary shadow-sm" />
+                          <button onClick={addCustomQuestion} className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-bold text-xs uppercase hover:text-blue-700 transition-colors">Add</button>
                        </div>
-                       <button onClick={sendToClient} disabled={draftedQuestions.length === 0} className="w-full bg-primary text-white font-bold py-4 rounded-2xl flex items-center justify-center disabled:opacity-50">
+                       <button onClick={sendToClient} disabled={draftedQuestions.length === 0 || isSending} className="w-full bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center disabled:opacity-50 transition-colors shadow-sm">
                           {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Send to Client"}
                        </button>
                     </div>
                  </div>
               </div>
 
+              {/* CLIENT RESPONSES CARD */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-8 py-5 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
                   <h3 className="font-bold text-navy text-lg">Client Responses</h3>
                   <button 
                     onClick={fetchClarifications} 
                     disabled={isRefreshingAns}
-                    className="text-primary text-xs font-bold flex items-center bg-blue-50 px-4 py-2 rounded-xl hover:bg-blue-100 transition-all disabled:opacity-50"
+                    className="text-primary text-xs font-bold flex items-center bg-white border border-gray-200 shadow-sm px-4 py-2 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all disabled:opacity-50"
                   >
                     <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingAns ? 'animate-spin' : ''}`} /> 
                     {isRefreshingAns ? 'Refreshing...' : 'Refresh Answers'}
@@ -498,9 +576,8 @@ export default function AIAnalysis() {
                            </p>
 
                            {c.fileName && (
-                             <div className="mt-4 flex items-center p-3 bg-blue-50/50 border border-blue-100 rounded-lg max-w-max">
-                               <Paperclip className="w-4 h-4 text-primary mr-2" />
-                               <span className="text-xs font-bold text-primary truncate max-w-[250px]">{c.fileName}</span>
+                             <div className="mt-4">
+                               <DocumentViewer fileName={c.fileName} fileData={c.fileData} />
                              </div>
                            )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
@@ -28,7 +28,6 @@ export default function TaskAssignment() {
   
   const [manualForm, setManualForm] = useState({ title: '', priority: 'Medium', requiredRole: 'Full-stack Developer' });
 
-  // --- NEW: Identify Completed Statuses ---
   const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
 
   useEffect(() => {
@@ -206,7 +205,7 @@ export default function TaskAssignment() {
     'AI/ML Developer'
   ];
 
-  const reqNum = selectedReq ? (selectedReq.id.includes('-') ? selectedReq.id.split('-')[1] : selectedReq.id) : 'XXX';
+  const reqNum = selectedReq ? (selectedReq?.id?.includes('-') ? selectedReq.id.split('-')[1] : selectedReq.id) : 'XXX';
   const usedSuffixes = new Set();
   generatedTasks.forEach(t => {
     if (t.taskId) {
@@ -224,13 +223,12 @@ export default function TaskAssignment() {
   const isAssigned = selectedReq ? assignedStatuses.includes(selectedReq.status) : false;
   const pendingTaskCount = generatedTasks.filter(t => t.status === 'Unassigned').length;
 
-  // --- NEW: Sort Requirements so Completed are at the bottom ---
   const sortedRequirements = [...requirements].sort((a, b) => {
     const aFinished = finishedStatuses.includes(a.status);
     const bFinished = finishedStatuses.includes(b.status);
     if (aFinished && !bFinished) return 1;
     if (!aFinished && bFinished) return -1;
-    return a.id.localeCompare(b.id); // Sort alphabetically otherwise
+    return a.id.localeCompare(b.id);
   });
 
   return (
@@ -280,7 +278,6 @@ export default function TaskAssignment() {
                           >
                             <div className="flex justify-between items-start mb-0.5">
                               <p className={`text-sm font-bold truncate ${selectedReq?.id === req.id ? 'text-primary' : 'text-navy'}`}>{req.id}</p>
-                              {/* --- COMPLETED BADGE --- */}
                               {isCompleted && (
                                 <span className="bg-green-50 text-green-600 border border-green-200 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
                                   Completed
@@ -338,10 +335,11 @@ export default function TaskAssignment() {
             {(viewMode === 'ai' || viewMode === 'manual') && (
               <div className="flex flex-col lg:flex-row flex-1 lg:min-h-0">
                 
+                {/* --- LEFT SIDE: TASK LIST --- */}
                 <div className="w-full lg:w-3/5 lg:border-r border-b lg:border-b-0 border-gray-100 flex flex-col h-[400px] lg:h-full bg-[#FAFAFA]">
                   
                   {viewMode === 'ai' && (
-                    <>
+                    <div className="flex flex-col h-full w-full">
                       <div className="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-white flex-shrink-0">
                         <div className="flex items-center text-navy font-bold text-sm md:text-base">
                           <FileText className="w-4 h-4 md:w-5 md:h-5 mr-2 text-primary" /> Task Queue {isAssigned && "(Locked)"}
@@ -430,11 +428,11 @@ export default function TaskAssignment() {
                           })
                         )}
                       </div>
-                    </>
+                    </div>
                   )}
 
                   {viewMode === 'manual' && !isAssigned && (
-                    <>
+                    <div className="flex flex-col h-full w-full">
                       <div className="p-4 md:p-6 border-b border-gray-200 bg-white font-bold text-navy flex-shrink-0 flex justify-between items-center text-sm md:text-base">
                         <span>Add Task to Queue</span>
                         <button onClick={() => setViewMode(generatedTasks.length > 0 ? 'ai' : 'empty')} className="text-[11px] md:text-[13px] font-bold text-gray-500 hover:text-primary transition-colors bg-gray-50 hover:bg-blue-50 px-4 py-2 rounded-lg">
@@ -527,10 +525,11 @@ export default function TaskAssignment() {
                           </div>
                         </div>
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
 
+                {/* --- RIGHT SIDE: TEAM ASSIGNMENT --- */}
                 <div className="w-full lg:w-2/5 flex flex-col h-[400px] lg:h-full bg-white relative">
                   
                   {isAssigned ? (
@@ -557,7 +556,7 @@ export default function TaskAssignment() {
                       </div>
                     </div>
                   ) : (
-                    <>
+                    <div className="flex flex-col h-full w-full">
                       <div className="p-4 md:p-6 border-b border-gray-50 flex justify-between items-center text-sm font-bold text-gray-500 flex-shrink-0">
                         <span className="flex items-center"><Users className="w-4 h-4 mr-2" /> Development Teams</span>
                         {pendingTaskCount > 0 && <span className="text-[11px] md:text-xs font-normal text-gray-400">Select Leader to Forward</span>}
@@ -584,7 +583,10 @@ export default function TaskAssignment() {
                           else if (percent >= 80) barColor = 'bg-orange-500';
                           else if (percent >= 50) barColor = 'bg-yellow-400';
 
-                          const isRecommended = selectedReq && selectedReq.projectType === leader.specialty && !isOverloaded;
+                          // Safely format specialty to avoid crashes
+                          const leaderSpec = typeof leader.specialty === 'string' ? leader.specialty : (leader.specialty ? leader.specialty.toString() : '');
+                          const reqType = selectedReq?.projectType || '';
+                          const isRecommended = selectedReq && reqType && leaderSpec.toLowerCase().includes(reqType.toLowerCase()) && !isOverloaded;
 
                           return (
                             <div 
@@ -596,7 +598,7 @@ export default function TaskAssignment() {
                                   : selectedLeader?.id === leader.id 
                                     ? 'border-primary ring-2 ring-primary/10 shadow-sm bg-blue-50/20 cursor-pointer' 
                                     : isRecommended 
-                                      ? 'border-green-300 shadow-[0_4px_14px_rgba(16,185,129,0.1)] bg-white cursor-pointer hover:border-green-400' 
+                                      ? 'border-green-400 shadow-[0_4px_14px_rgba(16,185,129,0.15)] bg-white cursor-pointer ring-1 ring-green-100' 
                                       : 'border-gray-100 hover:shadow-md hover:border-blue-200 bg-white cursor-pointer'
                               }`}
                             >
@@ -607,11 +609,11 @@ export default function TaskAssignment() {
                                   </div>
                                   <div className="min-w-0">
                                     <h4 className="font-bold text-navy text-[14px] md:text-[15px] truncate">{leader.teamName}</h4>
-                                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">Specialty: <span className="font-medium text-gray-600">{leader.specialty}</span></p>
+                                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">Specialty: <span className="font-medium text-gray-600">{leaderSpec.replace(/Development/g, 'Dev ')}</span></p>
                                   </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-1 flex-shrink-0 pl-2">
-                                   {isRecommended && <span className="bg-green-50 text-green-600 text-[9px] md:text-[10px] font-bold px-2 py-1 rounded">Best Match</span>}
+                                   {isRecommended && <span className="bg-green-50 border border-green-200 text-green-700 text-[9px] md:text-[10px] font-bold px-2 py-1 rounded-md shadow-sm uppercase tracking-wider">Best Match</span>}
                                    {isOverloaded && <span className="flex items-center bg-red-50 text-red-600 text-[9px] md:text-[10px] font-bold px-2 py-1 rounded"><AlertCircle className="w-3 h-3 mr-1"/> Max Load</span>}
                                 </div>
                               </div>
@@ -638,14 +640,14 @@ export default function TaskAssignment() {
                             className="w-full bg-primary hover:bg-blue-600 text-white font-bold px-6 py-4 rounded-xl transition-all shadow-md flex justify-center items-center text-[13px] md:text-[14px]"
                           >
                             {isForwarding ? (
-                              <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Forwarding Queue...</>
+                              <span className="flex items-center"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Forwarding Queue...</span>
                             ) : (
-                              <><Send className="w-4 h-4 mr-2" /> Forward {pendingTaskCount} Task{pendingTaskCount > 1 ? 's' : ''} to {selectedLeader.teamName}</>
+                              <span className="flex items-center"><Send className="w-4 h-4 mr-2" /> Forward {pendingTaskCount} Task{pendingTaskCount > 1 ? 's' : ''} to {selectedLeader.teamName}</span>
                             )}
                           </button>
                         </div>
                       )}
-                    </>
+                    </div>
                   )}
 
                 </div>

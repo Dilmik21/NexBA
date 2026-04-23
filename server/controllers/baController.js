@@ -2,6 +2,9 @@ const { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BAC
 const { db } = require('../config/firebase');
 const { sendNotification } = require('../services/notificationService');
 
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
+
 const requireBaId = (req, res, next) => {
   const baId = req.query.uid || req.body.uid;
   if (!baId) return res.status(401).json({ success: false, message: "Unauthorized BA: Missing UID" });
@@ -29,7 +32,6 @@ const claimRequirement = async (req, res) => {
     const { baName } = req.body;
     await BARequirementModel.claimRequirement(id, req.baId, baName || "Unknown BA");
     
-    // --- 🚨 NOTIFICATION: Alert Client 🚨 ---
     let clientId = null;
     const reqSnap = await db.collection('requirements').where('reqId', '==', id).get();
     if (!reqSnap.empty) {
@@ -72,33 +74,89 @@ const getAnalyzedHistory = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+
+// =========================================================================
+// 🚀 CRASH-PROOF OPENAI INTEGRATION START
+// =========================================================================
+
+const extractTextFromFileData = async (fileName, fileData) => {
+  if (!fileData || !fileName || fileName === "No file attached") return null;
+
+  try {
+      const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
+      const fileBuffer = Buffer.from(base64Data, 'base64');
+      const ext = fileName.split('.').pop().toLowerCase();
+
+      if (ext === 'pdf') {
+          const pdfData = await pdfParse(fileBuffer);
+          return pdfData.text; 
+      } else if (ext === 'docx') {
+          const docxData = await mammoth.extractRawText({ buffer: fileBuffer });
+          return docxData.value; 
+      } else if (ext === 'txt') {
+          return fileBuffer.toString('utf-8');
+      }
+      return null; 
+  } catch (error) {
+      console.error("🚨 Failed to extract text from file:", error);
+      return null;
+  }
+};
+
 const callOpenAI = async (rawText, promptSystem, temp = 0.3) => {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY; 
-  if (!OPENAI_API_KEY) throw new Error("Missing API Key");
+  if (!OPENAI_API_KEY) {
+      console.error("🚨 Missing OPENAI_API_KEY in backend .env file!");
+      throw new Error("Missing API Key");
+  }
+
+  const safeText = rawText.length > 15000 ? rawText.substring(0, 15000) + "... [TRUNCATED DUE TO LENGTH]" : rawText;
+
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_API_KEY}` },
+    method: "POST", 
+    headers: { 
+        "Content-Type": "application/json", 
+        "Authorization": `Bearer ${OPENAI_API_KEY}` 
+    },
     body: JSON.stringify({ 
-      model: "gpt-3.5-turbo", 
-      messages: [{ role: "system", content: promptSystem }, {role: "user", content: rawText}], 
+      model: "gpt-3.5-turbo-1106", 
+      response_format: { type: "json_object" }, 
+      messages: [
+          { role: "system", content: promptSystem }, 
+          { role: "user", content: safeText }
+      ], 
       temperature: temp 
     })
   });
-  if (!response.ok) throw new Error(`OpenAI API failed`);
+
+  if (!response.ok) {
+      const errText = await response.text();
+      console.error("🚨 OpenAI API Error:", errText);
+      throw new Error(`OpenAI API failed: ${response.status}`);
+  }
+
   const aiResult = await response.json();
-  return JSON.parse(aiResult.choices[0].message.content);
+  const content = aiResult.choices[0].message.content;
+
+  try {
+      return JSON.parse(content);
+  } catch (e) {
+      console.error("🚨 Failed to parse OpenAI JSON. Raw string:", content);
+      throw new Error("Invalid JSON returned from OpenAI");
+  }
 };
 
 const getFallbackAIData = (rawTextToProcess, perspective = "General Analysis") => {
   const randomId = Math.floor(Math.random() * 10000); 
   return {
-    summary: `[FALLBACK MODE ACTIVE] Generated from perspective: ${perspective}. Attempt #${randomId}.`,
+    summary: `[FALLBACK MODE ACTIVE] The AI failed to generate a response. Please check your backend terminal for API Key or Token limit errors. Attempt #${randomId}.`,
     businessRequirements: [`Ensure system meets ${perspective} standards.`],
     softwareRequirements: [`Develop technical features for ${perspective}.`],
     userStories: [`As a user, I want ${perspective} to be handled correctly.`],
     acceptanceCriteria: [`System must pass ${perspective} testing protocols.`],
     riskFactors: [`Unforeseen challenges related to ${perspective}.`],
     ambiguousTerms: [{ term: "system", suggestion: `Please specify the ${perspective} architecture.` }],
-    suggestedQuestions: [`Can you provide more details regarding ${perspective}?`, `Question Code: ${randomId}`],
+    suggestedQuestions: [`Can you provide more details regarding ${perspective}?`],
     processedText: rawTextToProcess
   };
 };
@@ -124,19 +182,53 @@ const processRequirementWithAI = async (req, res) => {
       });
     }
 
-    const rawTextToProcess = reqData.description || reqData.text || "Empty requirement.";
+    let combinedTextToAnalyze = "";
+
+    if (reqData.description && reqData.description !== "No description provided.") {
+        combinedTextToAnalyze += "--- CLIENT MANUAL DESCRIPTION ---\n" + reqData.description + "\n\n";
+    }
+
+    const fileDataToParse = reqData.fileData || reqData.fileUrl;
+    const extractedFileText = await extractTextFromFileData(reqData.fileName, fileDataToParse);
+
+    if (extractedFileText) {
+        combinedTextToAnalyze += `--- EXTRACTED CONTENT FROM DOCUMENT (${reqData.fileName}) ---\n${extractedFileText}\n\n`;
+    } else if (reqData.fileName && reqData.fileName !== "No file attached") {
+        combinedTextToAnalyze += `--- ATTACHED DOCUMENT ---\nThe client attached a supporting file named "${reqData.fileName}", but text could not be extracted (likely an image). Provide an analysis based on the available description context.\n\n`;
+    }
+
+    if (!combinedTextToAnalyze.trim()) {
+        combinedTextToAnalyze = reqData.text || "Empty requirement.";
+    }
+
+    const prompt = `You are a senior Business Analyst AI. Extract and analyze requirements from the provided text. 
+    You MUST respond strictly with a valid JSON object matching EXACTLY this structure:
+    {
+      "summary": "A 2-3 sentence overview of the project.",
+      "businessRequirements": ["Req 1", "Req 2"],
+      "softwareRequirements": ["Req 1", "Req 2"],
+      "userStories": ["As a [type of user], I want [an action] so that [a benefit/a value]"],
+      "acceptanceCriteria": ["Criteria 1", "Criteria 2"],
+      "riskFactors": ["Risk 1", "Risk 2"],
+      "ambiguousTerms": [{"term": "Confusing Word", "suggestion": "Ask the client to clarify this word"}],
+      "suggestedQuestions": ["Question to ask client 1", "Question 2"]
+    }`;
+
     let aiProcessedData;
     try { 
-      const prompt = `You are a senior Business Analyst AI. Extract requirements from the text. Respond ONLY with a valid JSON object.`;
-      aiProcessedData = await callOpenAI(rawTextToProcess, prompt, 0.3); 
-      aiProcessedData.processedText = rawTextToProcess;
+      aiProcessedData = await callOpenAI(combinedTextToAnalyze, prompt, 0.3); 
+      aiProcessedData.processedText = combinedTextToAnalyze;
     } catch (e) { 
-      aiProcessedData = getFallbackAIData(rawTextToProcess, "Initial Processing"); 
+      console.error("Falling back due to AI error...");
+      aiProcessedData = getFallbackAIData(combinedTextToAnalyze, "Initial Processing"); 
     }
 
     const updatedData = await BARequirementModel.updateAIAnalysis(id, aiProcessedData, true);
     res.json({ success: true, data: aiProcessedData, reqDetails: updatedData, clarifications });
-  } catch (error) { res.status(500).json({ success: false }); }
+  } catch (error) { 
+      console.error("Endpoint crash:", error);
+      res.status(500).json({ success: false }); 
+  }
 };
 
 const regenerateRequirementWithAI = async (req, res) => {
@@ -145,24 +237,51 @@ const regenerateRequirementWithAI = async (req, res) => {
     const reqDoc = await BARequirementModel.getRequirementByReqId(id);
     if (!reqDoc) return res.status(404).json({ success: false, message: "Requirement not found" });
     
-    const rawTextToProcess = reqDoc.data.description || reqDoc.data.text || "Empty requirement.";
+    const reqData = reqDoc.data;
+    let combinedTextToAnalyze = "";
+
+    if (reqData.description && reqData.description !== "No description provided.") {
+        combinedTextToAnalyze += "--- CLIENT MANUAL DESCRIPTION ---\n" + reqData.description + "\n\n";
+    }
+
+    const fileDataToParse = reqData.fileData || reqData.fileUrl;
+    const extractedFileText = await extractTextFromFileData(reqData.fileName, fileDataToParse);
+
+    if (extractedFileText) {
+        combinedTextToAnalyze += `--- EXTRACTED CONTENT FROM DOCUMENT (${reqData.fileName}) ---\n${extractedFileText}\n\n`;
+    } else if (reqData.fileName && reqData.fileName !== "No file attached") {
+        combinedTextToAnalyze += `--- ATTACHED DOCUMENT ---\nFile Name: "${reqData.fileName}".\n\n`;
+    }
+
+    if (!combinedTextToAnalyze.trim()) combinedTextToAnalyze = "Empty requirement.";
     
     const perspectives = ["Security & Data Privacy", "User Experience & Accessibility", "Scalability & Performance"];
     const randomPerspective = perspectives[Math.floor(Math.random() * perspectives.length)];
 
+    const prompt = `You are a highly creative senior Business Analyst AI. REGENERATE the analysis focusing strictly on: "${randomPerspective}".
+    You MUST respond strictly with a valid JSON object matching EXACTLY this structure:
+    {
+      "summary": "String", "businessRequirements": ["String"], "softwareRequirements": ["String"],
+      "userStories": ["String"], "acceptanceCriteria": ["String"], "riskFactors": ["String"],
+      "ambiguousTerms": [{"term": "String", "suggestion": "String"}], "suggestedQuestions": ["String"]
+    }`;
+
     let aiProcessedData;
     try { 
-      const prompt = `You are a highly creative senior Business Analyst AI. REGENERATE analysis focusing on: "${randomPerspective}". Respond ONLY with a valid JSON object.`;
-      aiProcessedData = await callOpenAI(rawTextToProcess, prompt, 1.0); 
-      aiProcessedData.processedText = rawTextToProcess;
+      aiProcessedData = await callOpenAI(combinedTextToAnalyze, prompt, 0.8); 
+      aiProcessedData.processedText = combinedTextToAnalyze;
     } catch (e) { 
-      aiProcessedData = getFallbackAIData(rawTextToProcess, randomPerspective); 
+      aiProcessedData = getFallbackAIData(combinedTextToAnalyze, randomPerspective); 
     }
 
     await BARequirementModel.updateAIAnalysis(id, aiProcessedData, false);
     res.json({ success: true, data: aiProcessedData });
   } catch (error) { res.status(500).json({ success: false }); }
 };
+
+// =========================================================================
+// 🚀 END CRASH-PROOF OPENAI INTEGRATION
+// =========================================================================
 
 const saveEditedAIAnalysis = async (req, res) => {
   try {
@@ -176,7 +295,6 @@ const sendClarificationQuestions = async (req, res) => {
     const baName = req.body.baName || "Your BA";
     await BACommunicationModel.sendClarificationQuestions(req.body.reqId, req.body.questions, req.baId, baName);
     
-    // --- 🚨 NOTIFICATION: Alert Client 🚨 ---
     const reqSnap = await db.collection('requirements').where('reqId', '==', req.body.reqId).get();
     if (!reqSnap.empty) {
         const clientId = reqSnap.docs[0].data().uid || reqSnap.docs[0].data().clientId;
@@ -225,16 +343,66 @@ const getDevelopers = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+// --- 🔥 MASSIVE CONTEXT TASK GENERATOR START 🔥 ---
 const generateTasksWithAI = async (req, res) => {
   try {
     const { reqId } = req.params;
-    const { aiProcessedData } = req.body;
     let aiResponse = { projectType: "Web Development", tasks: [] };
 
-    if (process.env.OPENAI_API_KEY && aiProcessedData) {
+    // 1. Get Requirement
+    const reqDoc = await BARequirementModel.getRequirementByReqId(reqId);
+    if (!reqDoc) return res.status(404).json({ success: false, message: "Requirement not found" });
+    const reqData = reqDoc.data;
+
+    // 2. Get Clarifications
+    const clarifications = await BACommunicationModel.getClarifications(reqId);
+    let qaContext = "";
+    if (clarifications && clarifications.length > 0) {
+        qaContext = "--- CLIENT CLARIFICATIONS (Q&A) ---\n";
+        clarifications.forEach(c => {
+            qaContext += `Question from BA: ${c.question}\nAnswer from Client: ${c.answer || 'No answer provided yet'}\n\n`;
+        });
+    }
+
+    // 3. Extract Document Text
+    const fileDataToParse = reqData.fileData || reqData.fileUrl;
+    const extractedFileText = await extractTextFromFileData(reqData.fileName, fileDataToParse);
+
+    // 4. Build Mega Context
+    let combinedTextToAnalyze = "";
+
+    if (reqData.description && reqData.description !== "No description provided.") {
+        combinedTextToAnalyze += "--- ORIGINAL CLIENT MANUAL DESCRIPTION ---\n" + reqData.description + "\n\n";
+    }
+
+    if (extractedFileText) {
+        combinedTextToAnalyze += `--- EXTRACTED CONTENT FROM DOCUMENT (${reqData.fileName}) ---\n${extractedFileText}\n\n`;
+    }
+
+    if (reqData.aiProcessedData) {
+        combinedTextToAnalyze += `--- CURRENT BA ANALYSIS & EDITS ---\n${JSON.stringify(reqData.aiProcessedData, null, 2)}\n\n`;
+    }
+
+    if (qaContext) {
+        combinedTextToAnalyze += qaContext;
+    }
+
+    if (!combinedTextToAnalyze.trim()) {
+        combinedTextToAnalyze = reqData.text || "Empty requirement.";
+    }
+
+    if (process.env.OPENAI_API_KEY) {
       try {
-        const prompt = `You are an expert Technical Project Manager. Break down these requirements into technical tasks. Respond ONLY with a JSON object.`;
-        aiResponse = await callOpenAI("Generate technical tasks.", prompt, 0.7); 
+        const prompt = `You are an expert Technical Project Manager. Break down these requirements into technical tasks. 
+        You MUST base your tasks on the original description, the document text, the BA's analysis, and especially the Client's Clarification Answers provided in the context.
+        You MUST respond strictly with a valid JSON object exactly like this:
+        {
+          "projectType": "Web Development",
+          "tasks": [
+            { "title": "Setup database", "priority": "High", "requiredRole": "Database Developer" }
+          ]
+        }`;
+        aiResponse = await callOpenAI(combinedTextToAnalyze, prompt, 0.7); 
       } catch(e) { console.error("AI Task Generation Failed:", e); }
     } 
     
@@ -261,6 +429,7 @@ const generateTasksWithAI = async (req, res) => {
     res.json({ success: true, data: allTasks, projectType: aiResponse.projectType });
   } catch (error) { res.status(500).json({ success: false }); }
 };
+// --- 🔥 MASSIVE CONTEXT TASK GENERATOR END 🔥 ---
 
 const saveAssignedTasks = async (req, res) => {
   try {
@@ -270,7 +439,6 @@ const saveAssignedTasks = async (req, res) => {
     } else {
       await BATaskModel.sendToEngineeringTeam(req.body.reqId, req.body.leaderId, req.body.leaderName);
       
-      // --- 🚨 NOTIFICATION: Alert Developer 🚨 ---
       if (req.body.leaderId) {
           await sendNotification({
               recipientId: req.body.leaderId,
@@ -379,13 +547,11 @@ const approveTaskVerification = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- 🚨 FIXED: FIND DEV DIRECTLY FROM REQUIREMENT 🚨 ---
 const rejectTaskVerification = async (req, res) => {
   try {
     const frontendId = req.params.taskId; 
     await BAVerificationModel.rejectTask(frontendId, req.body.reason);
     
-    // Look up the requirement to find the dev reliably
     const reqSnap = await db.collection('requirements').where('reqId', '==', frontendId).get();
     
     if (!reqSnap.empty) {
@@ -422,7 +588,6 @@ const getChatMessages = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- 🚨 FIXED: RELIABLY NOTIFY DEVELOPER FROM CHAT 🚨 ---
 const sendChatMessage = async (req, res) => {
   try {
     const { reqId, channel } = req.params;
@@ -449,7 +614,6 @@ const sendChatMessage = async (req, res) => {
             }
         } 
         else if (channelName === 'developer' || channelName === 'internal') {
-             // Extract dev ID directly from the requirement doc, bypass tasks!
              const developerId = reqData.teamLeaderId || reqData.developerId;
              if (developerId) {
                  await sendNotification({

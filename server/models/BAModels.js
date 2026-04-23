@@ -51,7 +51,6 @@ class BARequirementModel {
     const finishedStatuses = ['Complete', 'Completed', 'Approved & Live', 'Live', 'Closed', 'Done'];
     const preDevStatuses = ['Pending BA Review', 'In Analysis', 'Clarification Needed'];
 
-    // --- BULLETPROOF DEVELOPER COUNTING ---
     const activeReqIdsPerDevId = {};
     const activeReqIdsPerDevName = {};
 
@@ -67,7 +66,6 @@ class BARequirementModel {
       const isFinished = finishedStatuses.includes(status);
       const isPreDev = preDevStatuses.includes(status);
 
-      // Track active assignments from Requirements
       if (!isFinished && !isPreDev) {
         if (data.teamLeaderId) {
             if (!activeReqIdsPerDevId[data.teamLeaderId]) activeReqIdsPerDevId[data.teamLeaderId] = new Set();
@@ -104,7 +102,6 @@ class BARequirementModel {
       }
     });
 
-    // Track active assignments from Tasks (Catches older test data)
     if (!tasksSnapshot.empty) {
       tasksSnapshot.forEach(doc => {
         const taskData = doc.data();
@@ -173,8 +170,21 @@ class BARequirementModel {
       
       if (isUnassigned || (isMine && !isFinished)) {
         inbox.push({
-          dbId: doc.id, id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, title: data.title || 'Untitled Requirement', 
-          description: data.description || data.text || 'No description provided.', submitter: getClientName(data), company: data.company || data.companyName || 'Cargills Corporation', priority: getPriority(data), type: (data.fileUrl || data.fileName || data.attachments || data.type === 'File') ? 'File' : 'Text', fileName: data.fileName || 'document.pdf', fileUrl: data.fileUrl || null, fullDate: formatFullDate(data.submittedAt), timeAgo: getTimeAgo(data.submittedAt), rawDate: data.submittedAt || 0, status: data.status || 'Pending BA Review', isNew: isUnassigned
+          dbId: doc.id, 
+          id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`, 
+          title: data.title || 'Untitled Requirement', 
+          description: data.description || data.text || 'No description provided.', 
+          submitter: getClientName(data), 
+          company: data.company || data.companyName || 'Cargills Corporation', 
+          priority: getPriority(data), 
+          fileName: data.fileName || null, 
+          fileUrl: data.fileUrl || null, 
+          fileData: data.fileData || data.fileUrl || null,
+          fullDate: formatFullDate(data.submittedAt), 
+          timeAgo: getTimeAgo(data.submittedAt), 
+          rawDate: data.submittedAt || 0, 
+          status: data.status || 'Pending BA Review', 
+          isNew: isUnassigned
         });
       }
     });
@@ -260,9 +270,22 @@ class BATaskModel {
     } catch (error) { return 1; }
   }
 
+  // --- 🔥 SELF-HEALING LOGIC FOR TASK GENERATION DROPDOWN 🔥 ---
   static async getReadyRequirements(baId) {
     const reqSnapshot = await db.collection('requirements').where('baId', '==', baId).get();
     const tasksSnap = await db.collection('tasks').get().catch(() => ({ empty: true, forEach: () => {} }));
+    
+    // Check Clarifications table to see if any are still pending from the client
+    const clarificationsSnap = await db.collection('clarifications').get().catch(() => ({ empty: true, forEach: () => {} }));
+    const pendingClarifications = new Set();
+    if (!clarificationsSnap.empty) {
+        clarificationsSnap.forEach(doc => {
+            if (doc.data().status === 'Pending Client') {
+                pendingClarifications.add(doc.data().reqId);
+            }
+        });
+    }
+
     let taskMap = {};
     if (!tasksSnap.empty) {
       tasksSnap.forEach(doc => {
@@ -278,6 +301,21 @@ class BATaskModel {
     reqSnapshot.forEach(doc => {
       const data = doc.data();
       const rawReqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
+      let status = data.status || "";
+
+      // 🚀 AUTO-HEAL: If the database is stuck on "Clarification Needed" but there are actually NO pending questions, fix it!
+      if (status === 'Clarification Needed' && !pendingClarifications.has(rawReqId)) {
+          status = 'In Analysis'; // Override it for the UI immediately
+          // Silently fix the database in the background so it doesn't happen again
+          doc.ref.update({ 
+              status: 'In Analysis',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }).catch(() => console.log("Background DB heal failed, but UI is fixed."));
+      }
+
+      // Hide from Task Generation if it is genuinely waiting for client or not analyzed yet
+      if (status === 'Clarification Needed' || status === 'Pending BA Review') return;
+
       let mappedTasks = taskMap[rawReqId] || [];
       mappedTasks.sort((a, b) => {
         const numA = parseInt(a.taskId.split('-').pop(), 10) || 0;
@@ -285,9 +323,10 @@ class BATaskModel {
         return numA - numB;
       });
 
+      // Show it if it has an AI Analysis attached!
       if (data.aiProcessedData) {
         reqs.push({
-          id: rawReqId, title: data.title || "Untitled Requirement", status: data.status || "In Analysis",
+          id: rawReqId, title: data.title || "Untitled Requirement", status: status,
           projectType: data.projectType || null, teamLeaderName: data.teamLeaderName || null,
           aiProcessedData: data.aiProcessedData, tasks: mappedTasks 
         });
@@ -297,7 +336,6 @@ class BATaskModel {
     return { reqs }; 
   }
 
-  // --- 🔥 BULLETPROOF DEVELOPER COUNT FIX 🔥 ---
   static async getTeamLeaders() {
     const [usersSnapshot, reqsSnapshot, tasksSnapshot] = await Promise.all([
         db.collection('users').get(),
@@ -313,7 +351,6 @@ class BATaskModel {
         'Pending BA Review', 'In Analysis', 'Clarification Needed'
     ];
 
-    // 1. Scan Requirements Collection
     reqsSnapshot.forEach(doc => {
       const reqData = doc.data();
       const status = reqData.status || "";
@@ -330,7 +367,6 @@ class BATaskModel {
       }
     });
 
-    // 2. Scan Tasks Collection (Catches older assignments missing on the parent Requirement)
     if (!tasksSnapshot.empty) {
         tasksSnapshot.forEach(doc => {
            const taskData = doc.data();
@@ -359,7 +395,6 @@ class BATaskModel {
           const fullName = data.fullName || data.name || "Unknown Leader";
           const firstName = fullName.split(" ")[0];
           
-          // Get the unique count of active projects using the Set size
           const loadById = activeReqIdsPerDevId[doc.id] ? activeReqIdsPerDevId[doc.id].size : 0;
           const loadByName = activeReqIdsPerDevName[fullName] ? activeReqIdsPerDevName[fullName].size : 0;
           const trueLoad = Math.max(loadById, loadByName);
@@ -799,7 +834,11 @@ class BACommunicationHubModel {
       }
 
       reqs.push({
-        id: reqId, title: data.title || "Untitled Requirement", 
+        id: reqId, 
+        title: data.title || "Untitled Requirement", 
+        description: data.description || data.text || "No description provided.",
+        fileName: data.fileName || null,
+        fileData: data.fileData || data.fileUrl || null,
         clientName: finalClientName, clientImage: finalClientImage, clientIsOnline: finalClientOnline,
         devName: finalDevName, devImage: finalDevImage, devIsOnline: finalDevOnline, 
         unreadClient: 0, unreadDev: 0, lastActivity: data.updatedAt || data.submittedAt || { toMillis: () => 0 }

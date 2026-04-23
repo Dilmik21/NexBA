@@ -44,14 +44,13 @@ class RequirementModel {
       normalizedRisk = "Low";
     }
     
-    // FIXED: Added fileData to save the actual document content to Firestore
     const newRequirement = {
       title: projectData.title || "Untitled Project",
       description: projectData.description || "No description provided.",
       reqId: customReqId,
       uid: safeUid, 
       baId: "",      
-      clientName: clientName,             
+      clientName: clientName,            
       submittedBy: clientName,            
       company: companyName,               
       riskLevel: normalizedRisk,          
@@ -104,7 +103,6 @@ class RequirementModel {
         rawDbId: doc.id,
         description: data.description || "No description provided.",
         fileName: data.fileName || "No file attached",
-        // FIXED: Pulling the base64 file data out of Firestore to send to the UI
         fileData: data.fileData || data.fileUrl || null, 
         baName: data.baName || "Awaiting Assignment",
         rawDate: rawDate
@@ -496,7 +494,7 @@ class CommunicationModel {
           id: doc.id,
           reqId: reqId,
           title: parentReq.title || "Untitled Feature",
-          baName: data.baName || "Your BA",
+          baName: data.baName || "Business Analyst",
           timeAgo: getTimeAgo(data.createdAt),
           rawDate: data.createdAt || 0,
           priority: priority,
@@ -522,6 +520,7 @@ class CommunicationModel {
     return clarifications;
   }
 
+  // --- 🚀 THE MAGIC UNLOCK LOGIC INJECTED HERE 🚀 ---
   static async answerClarification(id, answer, fileName, fileData) {
     const clarificationRef = db.collection('clarifications').doc(id);
     const doc = await clarificationRef.get();
@@ -538,7 +537,29 @@ class CommunicationModel {
       updatePayload.fileData = fileData;
     }
 
+    // 1. Save the Answer
     await clarificationRef.update(updatePayload);
+
+    // 2. Check if we need to Unlock the Requirement!
+    const reqId = doc.data().reqId;
+
+    // Search for any *other* questions on this same project that are still waiting for the client
+    const pendingSnap = await db.collection('clarifications')
+        .where('reqId', '==', reqId)
+        .where('status', '==', 'Pending Client')
+        .get();
+
+    // If none are pending, that means the client answered EVERYTHING! We can unlock the project.
+    if (pendingSnap.empty) {
+        const reqSnapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
+        if (!reqSnapshot.empty) {
+            // Update the status so the BA can generate tasks again!
+            await reqSnapshot.docs[0].ref.update({ 
+                status: "In Analysis",
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    }
   }
 
   static async getChatProjects(uid) {

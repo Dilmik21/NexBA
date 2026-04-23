@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const clientController = require('../controllers/ClientController');
+const clientController = require('../controllers/clientController');
 
 // Ensure the middleware is applied to ALL routes
 const auth = clientController.requireUid;

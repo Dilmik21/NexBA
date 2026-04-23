@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { X, FileText, Folder, Sparkles, ArrowRight, ArrowLeft, Rocket, Loader2, UploadCloud, File as FileIcon, AlertCircle } from "lucide-react";
+import { X, FileText, Sparkles, ArrowRight, ArrowLeft, Rocket, Loader2, UploadCloud, File as FileIcon, AlertCircle } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function NewProjectModal({ isOpen, onClose }) {
@@ -17,32 +17,40 @@ export default function NewProjectModal({ isOpen, onClose }) {
 
   const [formData, setFormData] = useState({
     title: "",
-    type: "", 
     description: "",
     priority: "Medium"
   });
 
   if (!isOpen) return null;
 
-  const isStep1Valid = formData.title.trim() !== "" && formData.type !== "";
-  const isStep2Valid = formData.type === 'text' 
-    ? formData.description.trim() !== "" 
-    : uploadedFile !== null; 
+  const isStep1Valid = formData.title.trim() !== "";
+  const isStep2Valid = formData.description.trim() !== "" || uploadedFile !== null; 
   
   const canContinue = (step === 1 && isStep1Valid) || (step === 2 && isStep2Valid);
 
+  // FIXED: Now properly converts the file into Base64 data so the database can store the actual document!
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        alert("File is too large. Please keep uploads under 10MB.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
       const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
       const extension = file.name.split('.').pop().toUpperCase();
       
-      setUploadedFile({
-        name: file.name,
-        size: `${sizeInMB} MB`,
-        type: extension,
-        rawFile: file 
-      });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUploadedFile({
+          name: file.name,
+          size: `${sizeInMB} MB`,
+          type: extension,
+          base64: reader.result // <--- The actual file content
+        });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -79,10 +87,13 @@ export default function NewProjectModal({ isOpen, onClose }) {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
+    // FIXED: Now includes fileData in the payload
     const finalPayload = {
       ...formData,
+      type: uploadedFile ? 'document' : 'text',
       fileName: uploadedFile ? uploadedFile.name : null,
       fileSize: uploadedFile ? uploadedFile.size : null,
+      fileData: uploadedFile ? uploadedFile.base64 : null,
       uid: currentUser?.uid
     };
 
@@ -95,8 +106,9 @@ export default function NewProjectModal({ isOpen, onClose }) {
       const data = await response.json();
       if (data.success) {
         setStep(1);
-        setFormData({ title: "", type: "", description: "", priority: "Medium" });
+        setFormData({ title: "", description: "", priority: "Medium" });
         setUploadedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         setShowAIPopup(false);
         setAiError(null);
         onClose();
@@ -117,15 +129,13 @@ export default function NewProjectModal({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-[100] flex items-center justify-center p-0 md:p-4">
-      {/* Container: Full screen on mobile, capped height on desktop */}
       <div className="bg-white w-full max-w-3xl rounded-none md:rounded-[2rem] shadow-2xl flex flex-col h-full md:h-[650px] overflow-hidden">
         
-        {/* HEADER & PROGRESS BAR */}
         <div className="px-6 py-5 md:px-8 md:py-6 flex justify-between items-start border-b md:border-b-0 border-gray-100">
           <div>
             <h2 className="text-xl md:text-2xl font-bold text-navy">New Project</h2>
             <p className="text-[12px] md:text-sm text-gray-400 mt-1">
-              {step === 1 ? "The Basics" : step === 2 ? "Content" : "Review & Submit"}
+              {step === 1 ? "The Basics" : step === 2 ? "Requirements & Files" : "Review & Submit"}
             </p>
           </div>
 
@@ -149,142 +159,110 @@ export default function NewProjectModal({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* CONTENT AREA */}
-        <div className="flex-1 px-6 py-6 md:px-8 md:py-4 overflow-y-auto">
+        <div className="flex-1 px-6 py-6 md:px-8 md:py-4 overflow-y-auto custom-scrollbar">
           
-          {/* STEP 1: Title & Type */}
           {step === 1 && (
-            <div className="space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div>
-                <input 
-                  type="text" 
-                  placeholder="Feature name..." 
-                  className="w-full text-2xl md:text-3xl font-bold text-navy placeholder-gray-300 outline-none border-b-2 border-gray-100 pb-3 md:pb-4 focus:border-primary transition-colors bg-transparent"
-                  value={formData.title}
-                  onChange={(e) => setFormData({...formData, title: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <p className="text-xs md:text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">Description Method</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                  <div 
-                    onClick={() => setFormData({...formData, type: 'text'})}
-                    className={`p-5 md:p-6 rounded-2xl border-2 cursor-pointer transition-all ${
-                      formData.type === 'text' ? "border-primary bg-blue-50/50" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl border border-gray-100 flex items-center justify-center shadow-sm mb-4">
-                      <FileText className={`w-5 h-5 md:w-6 md:h-6 ${formData.type === 'text' ? 'text-primary' : 'text-gray-600'}`} />
-                    </div>
-                    <h3 className="font-bold text-navy text-sm md:text-base">Text Description</h3>
-                    <p className="text-xs md:text-sm text-gray-500 mt-2">Write out your requirements manually.</p>
-                  </div>
-
-                  <div 
-                    onClick={() => setFormData({...formData, type: 'document'})}
-                    className={`p-5 md:p-6 rounded-2xl border-2 cursor-pointer transition-all ${
-                      formData.type === 'document' ? "border-primary bg-blue-50/50" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl border border-gray-100 flex items-center justify-center shadow-sm mb-4">
-                      <Folder className={`w-5 h-5 md:w-6 md:h-6 ${formData.type === 'document' ? 'text-primary' : 'text-gray-600'}`} />
-                    </div>
-                    <h3 className="font-bold text-navy text-sm md:text-base">Document Upload</h3>
-                    <p className="text-xs md:text-sm text-gray-500 mt-2">Upload a Spec or PDF file.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: Text Path */}
-          {step === 2 && formData.type === 'text' && (
-            <div className="h-full flex flex-col relative animate-in fade-in slide-in-from-right-4 duration-500">
-              {aiError && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs md:text-sm font-bold text-red-800">Invalid Input</h4>
-                    <p className="text-[11px] md:text-sm text-red-600 mt-1">{aiError}</p>
-                  </div>
-                </div>
-              )}
-
-              <textarea 
-                className={`w-full flex-1 p-5 md:p-6 bg-gray-50 rounded-2xl resize-none outline-none focus:ring-2 focus:ring-primary/20 transition-all text-navy text-sm md:text-base ${aiError ? 'border-2 border-red-200' : ''}`}
-                placeholder="Describe the feature in detail..."
-                value={formData.description}
-                onChange={(e) => {
-                  setFormData({...formData, description: e.target.value});
-                  if (aiError) setAiError(null); 
-                }}
+            <div className="h-full flex flex-col justify-center animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+              <label className="text-xs md:text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Project Name</label>
+              <input 
+                type="text" 
+                placeholder="E.g., User Authentication Flow..." 
+                className="w-full text-2xl md:text-4xl font-bold text-navy placeholder-gray-300 outline-none border-b-2 border-gray-100 pb-3 md:pb-4 focus:border-primary transition-colors bg-transparent"
+                value={formData.title}
+                onChange={(e) => setFormData({...formData, title: e.target.value})}
+                autoFocus
               />
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="h-full flex flex-col relative animate-in fade-in slide-in-from-right-4 duration-500 space-y-4">
               
-              {!aiError && (
-                <button 
-                  onClick={() => setShowAIPopup(!showAIPopup)}
-                  className="absolute top-3 right-3 md:top-4 md:right-4 bg-purple-100 text-purple-600 p-2.5 rounded-xl hover:bg-purple-200 transition-colors shadow-sm"
-                >
-                  <Sparkles className="w-5 h-5" />
-                </button>
-              )}
-
-              {showAIPopup && (
-                <div className="absolute top-14 right-0 w-full sm:w-72 bg-white rounded-2xl shadow-xl border border-purple-100 p-5 z-20 animate-in fade-in zoom-in-95">
-                  <div className="flex justify-between items-center mb-2">
-                    <div className="flex items-center space-x-2 text-purple-600 font-bold text-sm">
-                      <Sparkles className="w-4 h-4" />
-                      <span>AI Assistant</span>
+              <div className="flex-1 flex flex-col relative min-h-[250px]">
+                {aiError && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start space-x-3">
+                    <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs md:text-sm font-bold text-red-800">Invalid Input</h4>
+                      <p className="text-[11px] md:text-sm text-red-600 mt-1">{aiError}</p>
                     </div>
-                    <button onClick={() => setShowAIPopup(false)} className="text-gray-400"><X className="w-4 h-4" /></button>
                   </div>
-                  <p className="text-[11px] text-gray-500 mb-4">Let AI structure your rough thoughts.</p>
+                )}
+
+                <textarea 
+                  className={`w-full flex-1 p-5 md:p-6 bg-gray-50 rounded-2xl resize-none outline-none focus:ring-2 focus:ring-primary/20 transition-all text-navy text-sm md:text-base ${aiError ? 'border-2 border-red-200' : 'border border-transparent'}`}
+                  placeholder="Describe the feature in detail (Optional if you are attaching a file)..."
+                  value={formData.description}
+                  onChange={(e) => {
+                    setFormData({...formData, description: e.target.value});
+                    if (aiError) setAiError(null); 
+                  }}
+                />
+                
+                {!aiError && (
                   <button 
-                    onClick={handleAIStructure}
-                    disabled={!formData.description || isGenerating}
-                    className="w-full bg-purple-50 text-purple-600 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center disabled:opacity-50"
+                    onClick={() => setShowAIPopup(!showAIPopup)}
+                    className="absolute top-3 right-3 md:top-4 md:right-4 bg-purple-100 text-purple-600 p-2.5 rounded-xl hover:bg-purple-200 transition-colors shadow-sm"
                   >
-                    {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Format with AI"}
+                    <Sparkles className="w-5 h-5" />
                   </button>
-                </div>
-              )}
+                )}
+
+                {showAIPopup && (
+                  <div className="absolute top-14 right-0 w-full sm:w-72 bg-white rounded-2xl shadow-xl border border-purple-100 p-5 z-20 animate-in fade-in zoom-in-95">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center space-x-2 text-purple-600 font-bold text-sm">
+                        <Sparkles className="w-4 h-4" />
+                        <span>AI Assistant</span>
+                      </div>
+                      <button onClick={() => setShowAIPopup(false)} className="text-gray-400 hover:text-navy"><X className="w-4 h-4" /></button>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mb-4">Let AI structure your rough thoughts into a professional requirement.</p>
+                    <button 
+                      onClick={handleAIStructure}
+                      disabled={!formData.description || isGenerating}
+                      className="w-full bg-purple-50 text-purple-600 hover:bg-purple-100 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center transition-colors disabled:opacity-50"
+                    >
+                      {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Format with AI"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-shrink-0 pt-2">
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" />
+                {!uploadedFile ? (
+                  <div 
+                    onClick={() => fileInputRef.current.click()}
+                    className="border-2 border-dashed border-gray-200 rounded-2xl p-5 flex items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-primary transition-colors text-center"
+                  >
+                    <UploadCloud className="w-6 h-6 text-gray-400 mr-4" />
+                    <div className="text-left">
+                      <p className="text-navy font-bold text-sm">Attach a supporting document (Optional)</p>
+                      <p className="text-gray-400 text-[11px] mt-0.5">PDF, DOCX, TXT, Images supported</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border border-gray-100 rounded-2xl p-4 flex items-center justify-between bg-white shadow-sm ring-1 ring-black/5">
+                    <div className="flex items-center space-x-4 min-w-0">
+                      <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center text-red-500 flex-shrink-0">
+                        <FileIcon className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-navy text-sm truncate">{uploadedFile.name}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate">{uploadedFile.size} · Uploaded</p>
+                      </div>
+                    </div>
+                    <button onClick={() => { setUploadedFile(null); if(fileInputRef.current) fileInputRef.current.value = ""; }} className="p-2 text-gray-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
 
-          {/* STEP 2: Document Path */}
-          {step === 2 && formData.type === 'document' && (
-            <div className="h-full flex flex-col justify-center animate-in fade-in slide-in-from-right-4 duration-500">
-              <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf,.docx,.txt" />
-              {!uploadedFile ? (
-                <div 
-                  onClick={() => fileInputRef.current.click()}
-                  className="border-2 border-dashed border-gray-200 rounded-3xl h-[250px] md:h-[300px] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-primary transition-colors px-6 text-center"
-                >
-                  <div className="w-12 h-12 md:w-16 md:h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4">
-                    <UploadCloud className="w-6 h-6 md:w-8 md:h-8 text-gray-400" />
-                  </div>
-                  <p className="text-navy font-bold text-sm md:text-base">Upload Project Specs</p>
-                  <p className="text-gray-400 text-xs mt-1">PDF, DOCX, TXT supported</p>
-                </div>
-              ) : (
-                <div className="border border-gray-100 rounded-2xl p-4 md:p-6 flex items-center justify-between bg-white shadow-sm">
-                  <div className="flex items-center space-x-4 md:space-x-6 min-w-0">
-                    <div className="w-10 h-10 md:w-14 md:h-14 bg-red-50 rounded-xl flex items-center justify-center text-red-500 flex-shrink-0">
-                      <FileIcon className="w-5 h-5 md:w-7 md:h-7" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold text-navy text-sm md:text-base truncate">{uploadedFile.name}</p>
-                      <p className="text-[10px] md:text-sm text-gray-400 mt-1 truncate">{uploadedFile.size} · Uploaded</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setUploadedFile(null)} className="p-2 text-gray-400 hover:text-red-500"><X className="w-5 h-5" /></button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* STEP 3: Review */}
           {step === 3 && (
             <div className="space-y-4 md:space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
               <div className="bg-gray-50 rounded-2xl p-5 md:p-6 border border-gray-100">
@@ -294,14 +272,22 @@ export default function NewProjectModal({ isOpen, onClose }) {
                 </div>
                 
                 <div className="mb-4">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Source</p>
-                  <div className="flex items-center text-sm font-semibold text-primary">
-                    {formData.type === 'text' ? <FileText className="w-4 h-4 mr-2" /> : <FileIcon className="w-4 h-4 mr-2 text-red-500" />}
-                    {formData.type === 'text' ? 'Manual Description' : uploadedFile?.name}
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Provided Materials</p>
+                  <div className="flex flex-col gap-2">
+                    {formData.description.trim() !== "" && (
+                      <div className="flex items-center text-sm font-semibold text-primary">
+                        <FileText className="w-4 h-4 mr-2" /> Manual Description Added
+                      </div>
+                    )}
+                    {uploadedFile && (
+                      <div className="flex items-center text-sm font-semibold text-red-500">
+                        <FileIcon className="w-4 h-4 mr-2" /> {uploadedFile.name} Attached
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {formData.type === 'text' && (
+                {formData.description.trim() !== "" && (
                   <div className="pt-4 border-t border-gray-200">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Description Preview</p>
                     <p className="text-xs text-gray-600 line-clamp-3 bg-white p-3 rounded-xl border border-gray-100 whitespace-pre-wrap">
@@ -333,11 +319,10 @@ export default function NewProjectModal({ isOpen, onClose }) {
 
         </div>
 
-        {/* FOOTER CONTROLS */}
         <div className="px-6 py-4 md:px-8 md:py-5 border-t border-gray-50 flex items-center justify-between bg-white md:rounded-b-[2rem] flex-shrink-0">
           <div className="w-20 md:w-24">
             {step > 1 && (
-              <button onClick={() => setStep(step - 1)} className="flex items-center text-gray-500 font-bold hover:text-navy text-sm">
+              <button onClick={() => setStep(step - 1)} className="flex items-center text-gray-500 font-bold hover:text-navy text-sm transition-colors">
                 <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
               </button>
             )}
@@ -348,7 +333,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
             disabled={step < 3 ? !canContinue : isSubmitting} 
             className={`px-8 py-3 md:py-2.5 rounded-xl md:rounded-full font-bold flex items-center justify-center transition-all ${
               (step < 3 ? canContinue : !isSubmitting)
-                ? "bg-primary text-white shadow-lg" 
+                ? "bg-primary text-white shadow-lg hover:bg-blue-600 hover:scale-105 active:scale-95" 
                 : "bg-gray-100 text-gray-400 cursor-not-allowed"
             } text-sm`}
           >

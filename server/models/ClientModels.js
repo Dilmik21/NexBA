@@ -44,6 +44,7 @@ class RequirementModel {
       normalizedRisk = "Low";
     }
     
+    // FIXED: Added fileData to save the actual document content to Firestore
     const newRequirement = {
       title: projectData.title || "Untitled Project",
       description: projectData.description || "No description provided.",
@@ -60,7 +61,8 @@ class RequirementModel {
       status: "Pending BA Review", 
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
       progress: 0,
-      fileName: projectData.fileName || null
+      fileName: projectData.fileName || null,
+      fileData: projectData.fileData || null 
     };
 
     await db.collection('requirements').add(newRequirement);
@@ -102,6 +104,8 @@ class RequirementModel {
         rawDbId: doc.id,
         description: data.description || "No description provided.",
         fileName: data.fileName || "No file attached",
+        // FIXED: Pulling the base64 file data out of Firestore to send to the UI
+        fileData: data.fileData || data.fileUrl || null, 
         baName: data.baName || "Awaiting Assignment",
         rawDate: rawDate
       });
@@ -126,22 +130,18 @@ class RequirementModel {
       const data = doc.data();
       const status = data.status || 'Pending BA Review';
 
-      // 1. Total Active (Excludes anything in the finished list)
       if (!finishedStatuses.includes(status)) {
         stats.totalActive++; 
       }
 
-      // 2. Pending Approvals (Waiting for the Client)
       if (status === "Client UAT" || status === "Modification Requested" || status === "Change Requested") {
         stats.pendingApprovals++;
       }
 
-      // 3. In Analysis (On the BA's desk)
       if (status === "Pending BA Review" || status === "In Analysis" || status === "Tasks Assigned") {
         stats.inAnalysis++;
       }
 
-      // 4. Clarifications Needed (Blocked, waiting for Client)
       if (status === "Clarification Needed") {
         stats.clarificationsNeeded++;
       }
@@ -172,11 +172,9 @@ class RequirementModel {
     return requirementsList.slice(0, 5);
   }
 
-  // --- 🚨 FIXED: Filter out Change Requests for Completed Projects ---
   static async getChangeRequests(uid) {
     const safeUid = uid || "INVALID";
     
-    // First, map which projects are actually still alive
     const reqsSnapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
     const activeReqIds = new Set();
     reqsSnapshot.forEach(doc => {
@@ -193,7 +191,6 @@ class RequirementModel {
     snapshot.forEach(doc => {
       const data = doc.data();
       
-      // ONLY show the change request if the parent project is still active
       if (activeReqIds.has(data.reqId)) {
         requests.push({
           id: data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`,
@@ -472,7 +469,6 @@ class RequirementModel {
 }
 
 class CommunicationModel {
-  // --- 🚨 FIXED: Filter out Clarifications for Completed Projects ---
   static async getClarifications(uid) {
     const safeUid = uid || "INVALID";
     const reqsSnapshot = await db.collection('requirements').where('uid', '==', safeUid).get();
@@ -480,7 +476,6 @@ class CommunicationModel {
     
     reqsSnapshot.forEach(doc => {
       const data = doc.data();
-      // ONLY map projects that are NOT finished
       if (!finishedStatuses.includes(data.status)) {
         requirementsMap[data.reqId] = data;
       }
@@ -493,7 +488,6 @@ class CommunicationModel {
       const data = doc.data();
       const reqId = data.reqId || "Unknown";
       
-      // If the requirement is not in the map, it means it's finished. Skip it!
       if (requirementsMap[reqId]) {
         const parentReq = requirementsMap[reqId];
         let priority = parentReq.priority || parentReq.riskLevel || "Medium";

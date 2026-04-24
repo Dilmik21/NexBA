@@ -87,16 +87,12 @@ const getClarifications = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// -------------------------------------------------------------
-// FIXED: Pull reqId from req.body to properly find the BA!
-// -------------------------------------------------------------
 const answerClarification = async (req, res) => {
   try {
-    const { id } = req.params; // Clarification Doc ID
+    const { id } = req.params; 
     const { answer, fileName, fileData, reqId } = req.body; 
     await CommunicationModel.answerClarification(id, answer, fileName, fileData);
 
-    // --- 🚨 NOTIFICATION: Find the BA and Alert Them 🚨 ---
     if (reqId) {
         let baId = null;
         const reqSnap = await db.collection('requirements').where('reqId', '==', reqId).get();
@@ -129,46 +125,82 @@ const getChatProjects = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+// --- THE FIX: Extract 'channel' from query and pass it to Model ---
 const getProjectMessages = async (req, res) => {
   try {
-      const msgs = await CommunicationModel.getMessagesForProject(req.params.reqId);
+      const channel = req.query.channel || 'Client';
+      const msgs = await CommunicationModel.getMessagesForProject(req.params.reqId, channel);
       res.json({ success: true, data: msgs });
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+// --- THE FIX: Extract 'channel' from body and pass it to Model + Dynamic Notifications ---
 const sendProjectMessage = async (req, res) => {
   try {
-      const { text, fileData, senderName } = req.body;
+      const { text, fileData, senderName, channel } = req.body;
       const { reqId } = req.params;
-      const newMsg = await CommunicationModel.sendMessage(reqId, req.uid, senderName, text, fileData);
+      const safeChannel = channel || 'Client';
+      
+      const newMsg = await CommunicationModel.sendMessage(reqId, req.uid, senderName, text, fileData, safeChannel);
 
-      // --- 🚨 NOTIFICATION: Alert the BA of a new message 🚨 ---
-      let baId = null;
+      // Fetch project to figure out who to notify
+      let reqData = null;
       const reqSnap = await db.collection('requirements').where('reqId', '==', reqId).get();
       if (!reqSnap.empty) {
-          baId = reqSnap.docs[0].data().baId || reqSnap.docs[0].data().claimedBy;
+          reqData = reqSnap.docs[0].data();
       } else {
           const docRef = await db.collection('requirements').doc(reqId).get();
-          if (docRef.exists) baId = docRef.data().baId || docRef.data().claimedBy;
+          if (docRef.exists) reqData = docRef.data();
       }
 
-      if (baId) {
-          await sendNotification({
-              recipientId: baId,
-              title: "New Message from Client",
-              message: `${senderName || "The client"} sent a message regarding project ${reqId}.`,
-              type: "Communication",
-              link: "/ba/communication"
-          });
+      if (reqData) {
+          const baId = reqData.baId || reqData.claimedBy;
+          const devId = reqData.teamLeaderId || reqData.developerId;
+
+          if (safeChannel === 'Group') {
+              // Notify BA
+              if (baId) {
+                  await sendNotification({
+                      recipientId: baId,
+                      title: "New Message in Group Hub",
+                      message: `${senderName || "The client"} sent a message in the Group chat for project ${reqId}.`,
+                      type: "Communication",
+                      link: "/ba/communication"
+                  });
+              }
+              // Notify Dev
+              if (devId) {
+                  await sendNotification({
+                      recipientId: devId,
+                      title: "New Message in Group Hub",
+                      message: `${senderName || "The client"} sent a message in the Group chat for project ${reqId}.`,
+                      type: "Communication",
+                      link: "/dev/communication"
+                  });
+              }
+          } else {
+              // Notify BA only (Direct Chat)
+              if (baId) {
+                  await sendNotification({
+                      recipientId: baId,
+                      title: "New Message from Client",
+                      message: `${senderName || "The client"} sent a message regarding project ${reqId}.`,
+                      type: "Communication",
+                      link: "/ba/communication"
+                  });
+              }
+          }
       }
 
       res.json({ success: true, data: newMsg });
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
+// --- THE FIX: Pass channel to mark read ---
 const markProjectMessagesRead = async (req, res) => {
   try {
-      await CommunicationModel.markMessagesAsRead(req.params.reqId, req.uid);
+      const channel = req.query.channel || req.body.channel || 'Client';
+      await CommunicationModel.markMessagesAsRead(req.params.reqId, req.uid, channel);
       res.json({ success: true });
   } catch (error) { res.status(500).json({ success: false }); }
 };
@@ -196,10 +228,9 @@ const getApprovals = async (req, res) => {
 
 const approveRequirement = async (req, res) => {
   try {
-    const { id } = req.params; // React passes reqId here
+    const { id } = req.params; 
     await RequirementModel.approveRequirement(id);
 
-    // --- 🚨 NOTIFICATION: Find the BA and Alert Them 🚨 ---
     let baId = null;
     const reqSnap = await db.collection('requirements').where('reqId', '==', id).get();
     if (!reqSnap.empty) {
@@ -228,11 +259,10 @@ const approveRequirement = async (req, res) => {
 
 const requestChangeForRequirement = async (req, res) => {
   try {
-    const { id } = req.params; // React passes reqId here
+    const { id } = req.params; 
     const { changeType, changeDescription } = req.body; 
     await RequirementModel.requestChange(id, changeType, changeDescription);
 
-    // --- 🚨 NOTIFICATION: Find the BA and Alert Them 🚨 ---
     let baId = null;
     const reqSnap = await db.collection('requirements').where('reqId', '==', id).get();
     if (!reqSnap.empty) {

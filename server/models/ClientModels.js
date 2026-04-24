@@ -13,7 +13,6 @@ const getTimeAgo = (timestamp) => {
   return "Just now";
 };
 
-// Centralized array for statuses that mean a project is 100% finished
 const finishedStatuses = ['Completed', 'Done', 'Approved & Live', 'Live', 'Closed'];
 
 class RequirementModel {
@@ -520,7 +519,6 @@ class CommunicationModel {
     return clarifications;
   }
 
-  // --- 🚀 THE MAGIC UNLOCK LOGIC INJECTED HERE 🚀 ---
   static async answerClarification(id, answer, fileName, fileData) {
     const clarificationRef = db.collection('clarifications').doc(id);
     const doc = await clarificationRef.get();
@@ -537,23 +535,17 @@ class CommunicationModel {
       updatePayload.fileData = fileData;
     }
 
-    // 1. Save the Answer
     await clarificationRef.update(updatePayload);
 
-    // 2. Check if we need to Unlock the Requirement!
     const reqId = doc.data().reqId;
-
-    // Search for any *other* questions on this same project that are still waiting for the client
     const pendingSnap = await db.collection('clarifications')
         .where('reqId', '==', reqId)
         .where('status', '==', 'Pending Client')
         .get();
 
-    // If none are pending, that means the client answered EVERYTHING! We can unlock the project.
     if (pendingSnap.empty) {
         const reqSnapshot = await db.collection('requirements').where('reqId', '==', reqId).get();
         if (!reqSnapshot.empty) {
-            // Update the status so the BA can generate tasks again!
             await reqSnapshot.docs[0].ref.update({ 
                 status: "In Analysis",
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -614,18 +606,24 @@ class CommunicationModel {
 
     const projectIds = Object.keys(projectsMap);
     if (projectIds.length > 0) {
-        const msgsSnap = await db.collection('messages')
-            .where('receiverRole', '==', 'Client').where('read', '==', false).get();
+        // NEW: Check both the 1-on-1 channel AND the Group channel for unread client messages!
+        const msgsSnap = await db.collection('messages').where('read', '==', false).get();
 
         msgsSnap.forEach(doc => {
             const msg = doc.data();
-            if (projectsMap[msg.reqId]) { projectsMap[msg.reqId].unreadCount++; }
+            if (projectsMap[msg.reqId]) {
+               // If it was sent directly to the Client, or if it was sent to the Group by someone else
+               if (msg.receiverRole === 'Client' || (msg.receiverRole === 'Group' && msg.senderRole !== 'Client')) {
+                   projectsMap[msg.reqId].unreadCount++;
+               }
+            }
         });
     }
     return Object.values(projectsMap);
   }
 
-  static async getMessagesForProject(reqId) {
+  // NEW: Updated to route between 'Client' and 'Group' channels
+  static async getMessagesForProject(reqId, channel = 'Client') {
     const msgsSnap = await db.collection('messages').where('reqId', '==', reqId).get();
     const usersSnap = await db.collection('users').get();
     let userMap = {};
@@ -634,8 +632,16 @@ class CommunicationModel {
     let messages = [];
     msgsSnap.forEach(doc => {
         const msg = doc.data();
-        const isClientChannel = msg.senderRole === 'Client' || msg.receiverRole === 'Client' || (msg.senderRole === 'BA' && msg.receiverRole === 'Client');
-        if (isClientChannel) {
+        
+        // Logic to grab messages based on the requested channel
+        let isValidMessage = false;
+        if (channel === 'Group') {
+           isValidMessage = msg.receiverRole === 'Group';
+        } else {
+           isValidMessage = msg.senderRole === 'Client' || msg.receiverRole === 'Client' || (msg.senderRole === 'BA' && msg.receiverRole === 'Client');
+        }
+
+        if (isValidMessage) {
             let realSenderName = msg.senderName;
             if (msg.senderId && userMap[msg.senderId]) realSenderName = userMap[msg.senderId];
             messages.push({
@@ -648,7 +654,8 @@ class CommunicationModel {
     return messages;
   }
 
-  static async sendMessage(reqId, uid, senderName, text, fileData) {
+  // NEW: Updated to support channel routing
+  static async sendMessage(reqId, uid, senderName, text, fileData, channel = 'Client') {
     let actualName = senderName || "Client";
     if (uid) {
       const userDoc = await db.collection('users').doc(uid).get();
@@ -657,19 +664,28 @@ class CommunicationModel {
     const newMsgRef = db.collection('messages').doc();
     const msgObj = { 
         reqId: reqId, senderId: uid || "UNKNOWN", senderName: actualName, senderRole: "Client", 
-        receiverRole: "BA", text: text || "", read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() 
+        receiverRole: channel === 'Group' ? 'Group' : 'BA', // Routes accurately!
+        text: text || "", read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() 
     };
     if (fileData) { msgObj.fileName = fileData.name; msgObj.fileUrl = fileData.base64; }
     await newMsgRef.set(msgObj);
     return { id: newMsgRef.id, ...msgObj, timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) };
   }
 
-  static async markMessagesAsRead(reqId, uid) {
-    const msgsSnap = await db.collection('messages')
-      .where('reqId', '==', reqId).where('receiverRole', '==', 'Client').where('read', '==', false).get();
+  // NEW: Mark both channels as read
+  static async markMessagesAsRead(reqId, uid, channel = 'Client') {
+    const msgsSnap = await db.collection('messages').where('reqId', '==', reqId).where('read', '==', false).get();
+    
     if (msgsSnap.empty) return { success: true, count: 0 };
     const batch = db.batch();
-    msgsSnap.forEach(doc => batch.update(doc.ref, { read: true }));
+    
+    msgsSnap.forEach(doc => {
+       const m = doc.data();
+       if (m.receiverRole === 'Client' || (m.receiverRole === 'Group' && m.senderRole !== 'Client')) {
+           batch.update(doc.ref, { read: true });
+       }
+    });
+    
     await batch.commit();
     return { success: true };
   }

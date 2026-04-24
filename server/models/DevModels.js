@@ -123,7 +123,15 @@ class DevDashboardModel {
         else if (progress >= 80 && progress < 100) { stage = 'Review'; stageColor = 'bg-yellow-100 text-yellow-700'; barColor = 'bg-green-600'; } 
         else if (progress === 100 && taskData.total > 0) { stage = 'Completed'; stageColor = 'bg-green-100 text-green-700'; barColor = 'bg-green-500'; }
 
-        requirementProgress.push({ reqId, title: req.title || "Untitled Requirement", stage, stageColor, barColor, progress });
+        requirementProgress.push({ 
+            reqId, 
+            title: req.title || "Untitled Requirement", 
+            stage, 
+            stageColor, 
+            barColor, 
+            progress,
+            rawDate: req.updatedAt || req.submittedAt || 0 
+        });
       }
     });
 
@@ -179,9 +187,20 @@ class DevDashboardModel {
 
     const allTasksSnap = await db.collection('tasks').get().catch(() => ({ empty: true, forEach: () => {} }));
     const allReqsSnap = await db.collection('requirements').get();
+    
+    const allClarificationsSnap = await db.collection('clarifications').get().catch(() => ({ empty: true, forEach: () => {} }));
 
     let myTasks = [];
     let myReqs = [];
+    let clarificationsMap = {};
+
+    if (!allClarificationsSnap.empty) {
+        allClarificationsSnap.forEach(doc => {
+            const c = doc.data();
+            if (!clarificationsMap[c.reqId]) clarificationsMap[c.reqId] = [];
+            clarificationsMap[c.reqId].push(c);
+        });
+    }
 
     const isMyData = (data) => {
         const dbLeaderId = data.teamLeaderId || "";
@@ -224,7 +243,7 @@ class DevDashboardModel {
       else if (req.createdAt) startDate = req.createdAt.toDate ? req.createdAt.toDate() : new Date(req.createdAt);
       const deadline = new Date(startDate.getTime() + (daysToComplete * 24 * 60 * 60 * 1000));
 
-      let description = req.description || req.text || "No text description provided by client.";
+      let description = req.description || req.text || "";
       let baAnalysis = req.aiProcessedData || req.analysis || req.baAnalysis || req.processedData || null;
 
       let clientName = req.clientName || req.clientFullName || req.requestedBy || req.submittedBy || req.author || (req.client && req.client.name) || "Unknown Client";
@@ -252,6 +271,9 @@ class DevDashboardModel {
         clientName: clientName, 
         clientOrg: clientOrg, 
         attachments: attachments, 
+        fileName: req.fileName || null,          
+        fileData: req.fileData || req.fileUrl || null, 
+        clarifications: clarificationsMap[reqId] || [], 
         submittedAt: startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         deadline: deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         isOverdue: new Date() > deadline && req.status !== 'Completed' && req.status !== 'Done',
@@ -288,6 +310,7 @@ class DevDashboardModel {
     return { success: true, dbId, newStatus };
   }
 
+  // --- NEW: Added 'unreadGroup' tracker for the Dev ---
   static async getChatList(devId) {
     const myProjects = await this.getMyTasksPageData(devId);
     
@@ -321,22 +344,27 @@ class DevDashboardModel {
     let chatList = [];
     
     myProjects.forEach(req => {
-        let reqMsgs = allMsgs.filter(m => {
-            if (m.reqId !== req.reqId) return false;
-            if (m.receiverRole === 'Client' || m.senderRole === 'Client') return false;
+        let reqMsgs = allMsgs.filter(m => m.reqId === req.reqId);
+        
+        let unreadDev = 0;
+        let unreadGroup = 0;
 
-            const isFromDev = m.senderId === devId || m.senderRole === 'Developer' || m.senderRole === 'Dev';
-            const isToDev = m.receiverId === devId || m.receiverRole === 'Developer';
-            
-            return isFromDev || isToDev;
+        reqMsgs.forEach(m => {
+           if (m.read === false) {
+               // Messages sent directly to the Developer
+               if (m.receiverRole === 'Developer' || m.receiverId === devId) {
+                   unreadDev++;
+               }
+               // Messages sent to the Group Hub (that weren't sent BY the Developer)
+               if (m.receiverRole === 'Group' && m.senderRole !== 'Developer' && m.senderRole !== 'Dev') {
+                   unreadGroup++;
+               }
+           }
         });
-        
-        reqMsgs.sort((a, b) => (a.createdAt?.toMillis?.() || a.timestamp?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || b.timestamp?.toMillis?.() || 0));
 
-        let unreadCount = reqMsgs.filter(m => (m.receiverId === devId || m.receiverRole === 'Developer') && m.read === false).length;
-        
         let lastMessage = "No messages yet";
         if (reqMsgs.length > 0) {
+            reqMsgs.sort((a, b) => (a.createdAt?.toMillis?.() || a.timestamp?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || b.timestamp?.toMillis?.() || 0));
             const lastMsg = reqMsgs[reqMsgs.length - 1];
             lastMessage = lastMsg.text || (lastMsg.attachment ? "📎 Attached a file" : "No messages yet");
         }
@@ -362,7 +390,9 @@ class DevDashboardModel {
             baName: finalBaName,
             baImage: finalBaImage, 
             isOnline: finalBaOnline, 
-            unreadCount: unreadCount,
+            unreadDev: unreadDev,
+            unreadGroup: unreadGroup,
+            unreadCount: unreadDev, // Kept for legacy fallback
             lastMessage: lastMessage,
             tasks: req.tasks.map(t => ({ taskId: t.taskId, displayId: t.displayId || t.taskId, title: t.title }))
         });
@@ -371,21 +401,37 @@ class DevDashboardModel {
     return chatList;
   }
 
-  static async getMessages(devId, reqId) {
+  // --- NEW: Uses the 'channel' parameter to strictly pull Group vs Direct messages ---
+  static async getMessages(devId, reqId, channel = 'BA') {
     const msgsSnap = await db.collection('messages').where('reqId', '==', reqId).get();
     let msgs = [];
     let batch = db.batch();
 
     msgsSnap.forEach(doc => {
         const m = doc.data();
-        if (m.receiverRole === 'Client' || m.senderRole === 'Client') return;
+        let isValid = false;
 
-        const isFromDev = m.senderId === devId || m.senderRole === 'Developer' || m.senderRole === 'Dev';
-        const isToDev = m.receiverId === devId || m.receiverRole === 'Developer';
+        if (channel === 'Group') {
+            isValid = m.receiverRole === 'Group';
+        } else {
+            // Direct BA Chat logic
+            const isFromDev = m.senderId === devId || m.senderRole === 'Developer' || m.senderRole === 'Dev';
+            const isToDev = m.receiverId === devId || m.receiverRole === 'Developer' || (m.senderRole === 'BA' && m.receiverRole !== 'Group' && m.receiverRole !== 'Client');
+            
+            isValid = (isFromDev || isToDev) && m.receiverRole !== 'Group';
+        }
         
-        if (isFromDev || isToDev) {
-            msgs.push({ id: doc.id, ...m });
-            if (isToDev && m.read === false) {
+        if (isValid) {
+            let senderNameStr = m.senderName;
+            msgs.push({ 
+                id: doc.id, 
+                ...m,
+                senderName: senderNameStr,
+                timeStr: new Date(m.createdAt?.toDate?.() || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            });
+
+            // If we fetched an unread message that wasn't sent by us, mark it read!
+            if (m.read === false && m.senderRole !== 'Developer' && m.senderRole !== 'Dev') {
                 batch.update(doc.ref, { read: true });
             }
         }
@@ -393,19 +439,20 @@ class DevDashboardModel {
 
     await batch.commit(); 
     msgs.sort((a, b) => (a.createdAt?.toMillis?.() || a.timestamp?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || b.timestamp?.toMillis?.() || 0));
-    return msgs.map(m => ({
-        ...m,
-        timestamp: m.createdAt?.toDate?.() || m.timestamp?.toDate?.() || new Date()
-    }));
+    return msgs;
   }
 
+  // --- NEW: Saves the message specifically to the correct channel (Group or BA) ---
   static async sendMessage(data) {
+    let finalReceiverRole = data.channel === 'Group' ? 'Group' : 'BA';
+
     const docRef = await db.collection('messages').add({
         reqId: data.reqId,
         senderId: data.senderId,
         receiverId: data.receiverId,
         senderName: data.senderName,
         senderRole: "Developer", 
+        receiverRole: finalReceiverRole,
         text: data.text || "",
         taskId: data.taskId || null, 
         attachment: data.attachment || null, 
@@ -413,7 +460,21 @@ class DevDashboardModel {
         createdAt: admin.firestore.FieldValue.serverTimestamp(), 
         read: false
     });
-    return { success: true, messageId: docRef.id };
+
+    return { 
+        success: true, 
+        data: {
+           id: docRef.id,
+           reqId: data.reqId,
+           senderId: data.senderId,
+           senderName: data.senderName,
+           senderRole: "Developer",
+           receiverRole: finalReceiverRole,
+           text: data.text || "",
+           taskId: data.taskId || null,
+           timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }
+    };
   }
 
   static async getPendingSubmissions(devId) { return await this.getEvidenceQueue(devId); }

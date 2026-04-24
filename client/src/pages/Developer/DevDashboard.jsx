@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import DevTopBar from "../../components/Developer/DevTopBar";
 import DevSidebar from "../../components/Developer/DevSidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { ListChecks, Clock, CheckCircle2, AlertTriangle, MessageSquare, UploadCloud, BarChart2, ArrowRight, FolderKanban } from "lucide-react";
+import { ListChecks, Clock, CheckCircle2, AlertTriangle, ArrowRight, FolderKanban } from "lucide-react";
 
 export default function DevDashboard() {
   const { currentUser, userData } = useAuth();
@@ -29,23 +29,41 @@ export default function DevDashboard() {
 
   const getFirstName = () => userData?.fullName?.split(" ")[0] || "Developer";
 
+  const formatDateTime = (dateInput) => {
+    if (!dateInput) return "Recently";
+    try {
+      let d = new Date();
+      if (typeof dateInput === 'string' || typeof dateInput === 'number') d = new Date(dateInput);
+      else if (dateInput._seconds) d = new Date(dateInput._seconds * 1000);
+      else if (dateInput.seconds) d = new Date(dateInput.seconds * 1000);
+      
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch(e) { return "Recently"; }
+  };
+
   return (
-    <div className="min-h-screen bg-[#F5F7FA] overflow-x-hidden">
+    // THE FIX: Removed overflow-hidden and flex-col to allow standard native scrolling!
+    <div className="min-h-screen bg-[#F5F7FA]">
       <DevTopBar />
 
-      <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8 pb-10">
-        <div className="hidden lg:block flex-shrink-0">
-          <DevSidebar />
+      <div className="flex max-w-[1600px] w-full mx-auto pt-6 px-4 md:px-6 gap-8 pb-12">
+        
+        {/* THE FIX: The Sidebar Wrapper is now perfectly Sticky just like the Client side! */}
+        <div className="hidden lg:block w-[260px] flex-shrink-0">
+          <div className="sticky top-[100px] h-[calc(100vh-130px)]">
+            <DevSidebar />
+          </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* Main Content Area naturally scrolls down externally */}
+        <div className="flex-1 min-w-0">
           
-          <div className="mb-6 md:mb-8">
+          <div className="mb-6 md:mb-8 flex-shrink-0">
             <h1 className="text-[20px] md:text-[24px] font-bold text-navy">Developer Dashboard</h1>
             <p className="text-[13px] md:text-[15px] text-gray-500 mt-1">Good morning, {getFirstName()}. Here's your work summary.</p>
           </div>
 
-          {/* --- KPI CARDS: INSTANT LOAD --- */}
+          {/* --- KPI CARDS --- */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
             <div className="bg-white rounded-2xl md:rounded-3xl p-5 md:p-6 border border-gray-100 shadow-sm flex flex-col justify-center transition-transform hover:shadow-md">
               <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 md:mb-6">
@@ -137,22 +155,31 @@ export default function DevDashboard() {
               ) : (
                 data.requirementProgress.map((req, idx) => (
                   <div key={idx} className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-10">
+                    
                     <div className="w-full md:w-[35%] min-w-0">
                       <p className="text-[11px] md:text-[12px] font-bold text-gray-400 mb-0.5 tracking-wide">{req.reqId}</p>
                       <h4 className="font-medium text-navy text-[14px] md:text-[15px] truncate">{req.title}</h4>
+                      <p className="text-[10px] text-gray-400 mt-1">Updated {formatDateTime(req.rawDate)}</p>
                     </div>
+                    
                     <div className="w-full md:w-[65%] flex items-center gap-3 md:gap-4">
                       <span className={`px-3 py-1 rounded-md text-[10px] md:text-[11px] font-bold min-w-[90px] md:min-w-[100px] text-center ${req.stageColor}`}>
                         {req.stage}
                       </span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2.5 md:h-3 overflow-hidden relative">
-                        <div className={`h-full rounded-full transition-all duration-500 ${req.barColor}`} style={{ width: `${req.progress}%` }}></div>
-                        {req.progress > 10 && (
-                          <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white z-10" style={{ left: `calc(${req.progress}% - 25px)`}}>
-                            {req.progress}%
-                          </span>
-                        )}
+                      
+                      <div className="flex-1 bg-gray-100 rounded-full h-3.5 md:h-4 overflow-hidden relative">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 flex items-center justify-end px-2 ${req.barColor}`} 
+                          style={{ width: `${Math.max(req.progress, 5)}%` }}
+                        >
+                          {req.progress > 5 && (
+                            <span className="text-[9px] md:text-[10px] font-bold text-white leading-none z-10">
+                              {req.progress}%
+                            </span>
+                          )}
+                        </div>
                       </div>
+
                     </div>
                   </div>
                 ))
@@ -160,56 +187,30 @@ export default function DevDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-            <div className="bg-white rounded-[20px] md:rounded-[24px] border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 md:px-6 py-4 md:py-5 border-b border-gray-50">
-                <h3 className="font-bold text-navy text-[15px] md:text-[16px]">Recent Activity</h3>
-              </div>
-              <div className="p-0">
-                {(!data?.recentActivity || data.recentActivity.length === 0) ? (
-                  <p className="text-sm text-gray-500 text-center py-8">
-                     {data === null ? "Loading activity..." : "No recent activity."}
-                  </p>
-                ) : (
-                  data.recentActivity.map((activity, idx) => (
-                    <div key={idx} className="flex items-start px-5 md:px-6 py-4 md:py-5 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                      <div className={`w-2 h-2 mt-1.5 rounded-full mr-3 md:mr-4 flex-shrink-0 ${
-                        activity.type === 'evidence' ? 'bg-green-500' : 'bg-[#007BFF]'
-                      }`}></div>
-                      <div className="flex-1 min-w-0 pr-4">
-                        <p className="text-[13px] md:text-[14px] text-navy leading-relaxed truncate md:whitespace-normal">
-                          <span className="font-bold">{activity.refId}</span> — {activity.text}
-                        </p>
-                      </div>
-                      <span className="text-[11px] md:text-[12px] font-medium text-gray-400 flex-shrink-0 mt-0.5">{activity.timeAgo}</span>
-                    </div>
-                  ))
-                )}
-              </div>
+          <div className="bg-white rounded-[20px] md:rounded-[24px] border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 md:px-6 py-4 md:py-5 border-b border-gray-50">
+              <h3 className="font-bold text-navy text-[15px] md:text-[16px]">Recent Activity</h3>
             </div>
-
-            <div className="bg-white rounded-[20px] md:rounded-[24px] border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 md:px-6 py-4 md:py-5 border-b border-gray-50">
-                <h3 className="font-bold text-navy text-[15px] md:text-[16px]">Quick Actions</h3>
-              </div>
-              <div className="p-5 md:p-6 space-y-3">
-                <Link to="/dev/tasks" className="flex items-center px-4 md:px-5 py-3.5 md:py-4 border border-gray-100 rounded-xl md:rounded-2xl hover:border-[#007BFF] hover:bg-blue-50/30 transition-all group">
-                  <ListChecks className="w-5 h-5 text-gray-400 group-hover:text-[#007BFF] mr-3 md:mr-4 flex-shrink-0" />
-                  <span className="font-semibold md:font-bold text-navy text-[14px] md:text-[15px]">View My Tasks</span>
-                </Link>
-                <Link to="/dev/communication" className="flex items-center px-4 md:px-5 py-3.5 md:py-4 border border-gray-100 rounded-xl md:rounded-2xl hover:border-[#007BFF] hover:bg-blue-50/30 transition-all group">
-                  <MessageSquare className="w-5 h-5 text-gray-400 group-hover:text-[#007BFF] mr-3 md:mr-4 flex-shrink-0" />
-                  <span className="font-semibold md:font-bold text-navy text-[14px] md:text-[15px]">Communication Hub</span>
-                </Link>
-                <Link to="/dev/evidence" className="flex items-center px-4 md:px-5 py-3.5 md:py-4 border border-gray-100 rounded-xl md:rounded-2xl hover:border-[#007BFF] hover:bg-blue-50/30 transition-all group">
-                  <UploadCloud className="w-5 h-5 text-gray-400 group-hover:text-[#007BFF] mr-3 md:mr-4 flex-shrink-0" />
-                  <span className="font-semibold md:font-bold text-navy text-[14px] md:text-[15px]">Submit Evidence</span>
-                </Link>
-                <Link to="/dev/performance" className="flex items-center px-4 md:px-5 py-3.5 md:py-4 border border-gray-100 rounded-xl md:rounded-2xl hover:border-[#007BFF] hover:bg-blue-50/30 transition-all group">
-                  <BarChart2 className="w-5 h-5 text-gray-400 group-hover:text-[#007BFF] mr-3 md:mr-4 flex-shrink-0" />
-                  <span className="font-semibold md:font-bold text-navy text-[14px] md:text-[15px]">View Performance</span>
-                </Link>
-              </div>
+            <div className="p-0">
+              {(!data?.recentActivity || data.recentActivity.length === 0) ? (
+                <p className="text-sm text-gray-500 text-center py-8">
+                   {data === null ? "Loading activity..." : "No recent activity."}
+                </p>
+              ) : (
+                data.recentActivity.map((activity, idx) => (
+                  <div key={idx} className="flex items-start px-5 md:px-6 py-4 md:py-5 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+                    <div className={`w-2 h-2 mt-1.5 rounded-full mr-3 md:mr-4 flex-shrink-0 ${
+                      activity.type === 'evidence' ? 'bg-green-500' : 'bg-[#007BFF]'
+                    }`}></div>
+                    <div className="flex-1 min-w-0 pr-4">
+                      <p className="text-[13px] md:text-[14px] text-navy leading-relaxed truncate md:whitespace-normal">
+                        <span className="font-bold">{activity.refId}</span> — {activity.text}
+                      </p>
+                    </div>
+                    <span className="text-[11px] md:text-[12px] font-medium text-gray-400 flex-shrink-0 mt-0.5">{activity.timeAgo}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

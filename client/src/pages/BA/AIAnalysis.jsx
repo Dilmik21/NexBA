@@ -65,50 +65,61 @@ const DocumentViewer = ({ fileName, fileData }) => {
   );
 }
 
+// --- THE FIX: Bulletproof Highlighted Text Component ---
 const HighlightedText = ({ text, terms }) => {
   if (!text) return <p className="text-gray-500 italic">No original text found in database for this requirement.</p>;
   
   const hasTerms = terms && terms.length > 0;
+
+  // Helper function to apply highlights to any string segment
+  const renderWithHighlights = (str, isBold) => {
+    if (!hasTerms) return isBold ? <strong className="font-bold text-navy">{str}</strong> : <span>{str}</span>;
+
+    // Filter out empty terms and escape regex characters safely
+    const validTerms = terms.filter(t => t.term && t.term.trim() !== '');
+    if (validTerms.length === 0) return isBold ? <strong className="font-bold text-navy">{str}</strong> : <span>{str}</span>;
+
+    const termWords = validTerms.map(t => t.term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    
+    // Removed the \b word boundaries so exact substrings trigger the highlight even if punctuation touches them!
+    const regex = new RegExp(`(${termWords})`, 'gi');
+    const blocks = str.split(regex);
+
+    return blocks.map((block, bIdx) => {
+      const termMatch = validTerms.find(t => t.term.trim().toLowerCase() === block.toLowerCase());
+      if (termMatch) {
+        return (
+          <span key={bIdx} className={`text-orange-500 font-semibold cursor-help relative group border-b border-orange-500 border-dashed pb-[1px] ${isBold ? 'font-extrabold' : ''}`}>
+            {block}
+            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 bg-gray-900 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none shadow-xl text-center leading-relaxed font-normal tracking-normal">
+              <span className="font-bold text-orange-300 block mb-1">AI Suggestion:</span>
+              {termMatch.suggestion}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+            </span>
+          </span>
+        );
+      }
+      return isBold ? <strong key={bIdx} className="font-bold text-navy">{block}</strong> : <span key={bIdx}>{block}</span>;
+    });
+  };
+
   const paragraphs = text.split(/\n+/);
 
   return (
     <div className="space-y-4 text-[14px] text-[#334155] leading-[1.8]">
       {paragraphs.map((para, pIdx) => {
+        // Split by markdown bold tags
         const parts = para.split(/(\*\*.*?\*\*)/g);
         return (
           <p key={pIdx}>
             {parts.map((part, i) => {
               if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={i} className="font-bold text-navy">{part.slice(2, -2)}</strong>;
+                // Pass the bold text through the highlighter too!
+                const innerText = part.slice(2, -2);
+                return <span key={i}>{renderWithHighlights(innerText, true)}</span>;
               }
-
-              if (hasTerms) {
-                const termWords = terms.map(t => t.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-                const regex = new RegExp(`\\b(${termWords})\\b`, 'gi');
-                const blocks = part.split(regex);
-                
-                return (
-                  <span key={i}>
-                    {blocks.map((block, bIdx) => {
-                      const termMatch = terms.find(t => t.term.toLowerCase() === block.toLowerCase());
-                      if (termMatch) {
-                        return (
-                          <span key={bIdx} className="text-orange-500 font-semibold cursor-help relative group border-b border-orange-500 border-dashed pb-[1px]">
-                            {block}
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 bg-gray-900 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none shadow-xl text-center leading-relaxed">
-                              <span className="font-bold text-orange-300 block mb-1">AI Suggestion:</span>
-                              {termMatch.suggestion}
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                            </span>
-                          </span>
-                        );
-                      }
-                      return <span key={bIdx}>{block}</span>;
-                    })}
-                  </span>
-                );
-              }
-              return <span key={i}>{part}</span>;
+              // Normal text
+              return <span key={i}>{renderWithHighlights(part, false)}</span>;
             })}
           </p>
         );
@@ -126,7 +137,6 @@ export default function AIAnalysis() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   
-  // --- FIXED: Pulled in userData so we have access to the BA's name ---
   const { currentUser, userData } = useAuth(); 
   
   const reqId = searchParams.get("reqId");
@@ -293,7 +303,6 @@ export default function AIAnalysis() {
     if (draftedQuestions.length === 0 || !currentUser?.uid) return;
     setIsSending(true);
     try {
-      // --- FIXED: Now sending baName in the payload! ---
       const payload = { 
         reqId: reqId, 
         questions: draftedQuestions, 
@@ -436,7 +445,7 @@ export default function AIAnalysis() {
                 )}
               </div>
 
-              {/* AI RESULTS CARD - WITH EDIT BUTTONS */}
+              {/* AI RESULTS CARD - WITH RISK FACTORS INCLUDED */}
               <div className={`bg-white rounded-[2rem] shadow-sm border transition-all p-8 ${isEditingAI ? 'border-primary ring-4 ring-primary/5' : 'border-gray-100'}`}>
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                   <h3 className="font-bold text-navy text-lg">AI Results</h3>
@@ -485,27 +494,34 @@ export default function AIAnalysis() {
                      )}
                    </div>
 
-                   {['businessRequirements', 'softwareRequirements', 'userStories', 'acceptanceCriteria'].map((field) => (
-                      <div key={field}>
-                        <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 capitalize">{field.replace(/([A-Z])/g, ' $1')}</h4>
-                        {isEditingAI ? (
-                           <textarea 
-                             value={Array.isArray(editedAIData?.[field]) ? editedAIData[field].join('\n') : ''} 
-                             onChange={(e) => handleArrayChange(field, e.target.value)} 
-                             placeholder={`Enter each ${field.replace(/([A-Z])/g, ' $1').toLowerCase()} on a new line...`}
-                             className="w-full bg-white border-2 border-gray-200 rounded-xl p-4 text-[14px] text-navy min-h-[140px] outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-inner leading-relaxed" 
-                           />
-                        ) : (
-                          <ul className="space-y-3">
-                            {aiData?.[field]?.map((item, i) => (
-                              <li key={i} className="flex items-start text-[14px] text-navy bg-gray-50/50 p-3.5 rounded-xl border border-gray-50">
-                                <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 mr-3 flex-shrink-0" />{item}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                   ))}
+                   {['businessRequirements', 'softwareRequirements', 'userStories', 'acceptanceCriteria', 'riskFactors'].map((field) => {
+                     const isRisk = field === 'riskFactors';
+                     
+                     return (
+                       <div key={field}>
+                         <h4 className={`text-sm font-bold uppercase tracking-widest mb-4 capitalize ${isRisk ? 'text-red-500' : 'text-gray-400'}`}>
+                           {field.replace(/([A-Z])/g, ' $1')}
+                         </h4>
+                         
+                         {isEditingAI ? (
+                            <textarea 
+                              value={Array.isArray(editedAIData?.[field]) ? editedAIData[field].join('\n') : ''} 
+                              onChange={(e) => handleArrayChange(field, e.target.value)} 
+                              placeholder={`Enter each ${field.replace(/([A-Z])/g, ' $1').toLowerCase()} on a new line...`}
+                              className={`w-full bg-white border-2 rounded-xl p-4 text-[14px] min-h-[140px] outline-none transition-all shadow-inner leading-relaxed ${isRisk ? 'text-red-900 border-red-200 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' : 'text-navy border-gray-200 focus:border-primary focus:ring-4 focus:ring-primary/10'}`} 
+                            />
+                         ) : (
+                           <ul className="space-y-3">
+                             {aiData?.[field]?.map((item, i) => (
+                               <li key={i} className={`flex items-start text-[14px] p-3.5 rounded-xl border ${isRisk ? 'bg-red-50/50 border-red-100 text-red-900' : 'bg-gray-50/50 border-gray-50 text-navy'}`}>
+                                 <div className={`w-1.5 h-1.5 rounded-full mt-2 mr-3 flex-shrink-0 ${isRisk ? 'bg-red-500' : 'bg-primary'}`} />{item}
+                               </li>
+                             ))}
+                           </ul>
+                         )}
+                       </div>
+                     );
+                   })}
                 </div>
               </div>
 

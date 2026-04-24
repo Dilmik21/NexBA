@@ -74,17 +74,22 @@ const getAnalyzedHistory = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-
-// =========================================================================
-// 🚀 CRASH-PROOF OPENAI INTEGRATION START
-// =========================================================================
-
 const extractTextFromFileData = async (fileName, fileData) => {
   if (!fileData || !fileName || fileName === "No file attached") return null;
 
   try {
-      const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
-      const fileBuffer = Buffer.from(base64Data, 'base64');
+      let fileBuffer;
+
+      if (fileData.startsWith('http://') || fileData.startsWith('https://')) {
+          const response = await fetch(fileData);
+          if (!response.ok) throw new Error("Failed to download file from URL");
+          const arrayBuffer = await response.arrayBuffer();
+          fileBuffer = Buffer.from(arrayBuffer);
+      } else {
+          const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
+          fileBuffer = Buffer.from(base64Data, 'base64');
+      }
+
       const ext = fileName.split('.').pop().toLowerCase();
 
       if (ext === 'pdf') {
@@ -202,6 +207,9 @@ const processRequirementWithAI = async (req, res) => {
     }
 
     const prompt = `You are a senior Business Analyst AI. Extract and analyze requirements from the provided text. 
+    
+    CRITICAL RULE FOR ambiguousTerms: The "term" value MUST be an EXACT, word-for-word copy of a short phrase found directly inside the original text. Do not paraphrase it, or the frontend highlighting system will break.
+
     You MUST respond strictly with a valid JSON object matching EXACTLY this structure:
     {
       "summary": "A 2-3 sentence overview of the project.",
@@ -210,7 +218,7 @@ const processRequirementWithAI = async (req, res) => {
       "userStories": ["As a [type of user], I want [an action] so that [a benefit/a value]"],
       "acceptanceCriteria": ["Criteria 1", "Criteria 2"],
       "riskFactors": ["Risk 1", "Risk 2"],
-      "ambiguousTerms": [{"term": "Confusing Word", "suggestion": "Ask the client to clarify this word"}],
+      "ambiguousTerms": [{"term": "EXACT string from the text", "suggestion": "Ask the client to clarify this word"}],
       "suggestedQuestions": ["Question to ask client 1", "Question 2"]
     }`;
 
@@ -259,11 +267,19 @@ const regenerateRequirementWithAI = async (req, res) => {
     const randomPerspective = perspectives[Math.floor(Math.random() * perspectives.length)];
 
     const prompt = `You are a highly creative senior Business Analyst AI. REGENERATE the analysis focusing strictly on: "${randomPerspective}".
+    
+    CRITICAL RULE FOR ambiguousTerms: The "term" value MUST be an EXACT, word-for-word substring copied directly from the original text. Do not paraphrase.
+
     You MUST respond strictly with a valid JSON object matching EXACTLY this structure:
     {
-      "summary": "String", "businessRequirements": ["String"], "softwareRequirements": ["String"],
-      "userStories": ["String"], "acceptanceCriteria": ["String"], "riskFactors": ["String"],
-      "ambiguousTerms": [{"term": "String", "suggestion": "String"}], "suggestedQuestions": ["String"]
+      "summary": "String", 
+      "businessRequirements": ["String"], 
+      "softwareRequirements": ["String"],
+      "userStories": ["String"], 
+      "acceptanceCriteria": ["String"], 
+      "riskFactors": ["String"],
+      "ambiguousTerms": [{"term": "EXACT string from text", "suggestion": "String"}], 
+      "suggestedQuestions": ["String"]
     }`;
 
     let aiProcessedData;
@@ -278,10 +294,6 @@ const regenerateRequirementWithAI = async (req, res) => {
     res.json({ success: true, data: aiProcessedData });
   } catch (error) { res.status(500).json({ success: false }); }
 };
-
-// =========================================================================
-// 🚀 END CRASH-PROOF OPENAI INTEGRATION
-// =========================================================================
 
 const saveEditedAIAnalysis = async (req, res) => {
   try {
@@ -343,18 +355,15 @@ const getDevelopers = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- 🔥 MASSIVE CONTEXT TASK GENERATOR START 🔥 ---
 const generateTasksWithAI = async (req, res) => {
   try {
     const { reqId } = req.params;
     let aiResponse = { projectType: "Web Development", tasks: [] };
 
-    // 1. Get Requirement
     const reqDoc = await BARequirementModel.getRequirementByReqId(reqId);
     if (!reqDoc) return res.status(404).json({ success: false, message: "Requirement not found" });
     const reqData = reqDoc.data;
 
-    // 2. Get Clarifications
     const clarifications = await BACommunicationModel.getClarifications(reqId);
     let qaContext = "";
     if (clarifications && clarifications.length > 0) {
@@ -364,11 +373,9 @@ const generateTasksWithAI = async (req, res) => {
         });
     }
 
-    // 3. Extract Document Text
     const fileDataToParse = reqData.fileData || reqData.fileUrl;
     const extractedFileText = await extractTextFromFileData(reqData.fileName, fileDataToParse);
 
-    // 4. Build Mega Context
     let combinedTextToAnalyze = "";
 
     if (reqData.description && reqData.description !== "No description provided.") {
@@ -429,7 +436,6 @@ const generateTasksWithAI = async (req, res) => {
     res.json({ success: true, data: allTasks, projectType: aiResponse.projectType });
   } catch (error) { res.status(500).json({ success: false }); }
 };
-// --- 🔥 MASSIVE CONTEXT TASK GENERATOR END 🔥 ---
 
 const saveAssignedTasks = async (req, res) => {
   try {
@@ -601,25 +607,25 @@ const sendChatMessage = async (req, res) => {
     if (!reqSnap.empty) {
         const reqData = reqSnap.docs[0].data();
         
-        if (channelName === 'client') {
+        if (channelName === 'client' || channelName === 'group') {
             const clientId = reqData.uid || reqData.clientId;
             if (clientId) {
                 await sendNotification({
                     recipientId: clientId,
-                    title: "New Message from BA",
-                    message: `${senderName || "Your BA"} sent you a message regarding project ${reqId}.`,
+                    title: "New Message",
+                    message: `${senderName || "Your BA"} sent a message in the ${channel} chat for project ${reqId}.`,
                     type: "Communication",
                     link: "/client/messages"
                 });
             }
         } 
-        else if (channelName === 'developer' || channelName === 'internal') {
+        if (channelName === 'developer' || channelName === 'internal' || channelName === 'group') {
              const developerId = reqData.teamLeaderId || reqData.developerId;
              if (developerId) {
                  await sendNotification({
                      recipientId: developerId,
-                     title: "New Message from BA",
-                     message: `${senderName || "Your BA"} sent a message regarding project ${reqId}.`,
+                     title: "New Message",
+                     message: `${senderName || "Your BA"} sent a message in the ${channel} chat for project ${reqId}.`,
                      type: "Communication",
                      link: "/dev/communication"
                  });

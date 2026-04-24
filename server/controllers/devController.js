@@ -100,13 +100,16 @@ const getChatList = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
+// --- NEW: Gets the channel query to pull the correct chat tab ---
 const getMessages = async (req, res) => {
   try {
-    const data = await DevDashboardModel.getMessages(req.uid, req.params.reqId);
+    const channel = req.query.channel || 'BA'; 
+    const data = await DevDashboardModel.getMessages(req.uid, req.params.reqId, channel);
     res.json({ success: true, data });
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
+// --- NEW: Forwards the body to the Model which now handles the 'channel' property ---
 const sendMessage = async (req, res) => {
   try {
     const result = await DevDashboardModel.sendMessage(req.body);
@@ -122,7 +125,8 @@ const sendMessage = async (req, res) => {
             if (reqDoc.exists) baId = reqDoc.data().baId || reqDoc.data().claimedBy;
         }
 
-        if (baId) {
+        // Only notify the BA if it was a direct message to them
+        if (baId && req.body.channel !== 'Group') {
             await sendNotification({
                 recipientId: baId,
                 title: "New Message from Developer",

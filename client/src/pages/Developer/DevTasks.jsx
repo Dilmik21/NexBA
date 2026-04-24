@@ -3,7 +3,53 @@ import { useLocation, useNavigate } from "react-router-dom";
 import DevTopBar from "../../components/Developer/DevTopBar";
 import DevSidebar from "../../components/Developer/DevSidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { Loader2, Calendar, User, AlertCircle, Clock, FileText, CheckCircle2, Circle, ClipboardList, Activity, Building2, Paperclip, ChevronDown, Check, Info } from "lucide-react";
+import { Loader2, Calendar, User, AlertCircle, Clock, FileText, CheckCircle2, Circle, ClipboardList, Activity, Building2, Paperclip, ChevronDown, Check, Info, Download, HelpCircle } from "lucide-react";
+
+// RESTORED: Document Viewer to show Client Documents
+const DocumentViewer = ({ fileName, fileData }) => {
+  const isImage = fileData?.startsWith('data:image') || fileName?.match(/\.(jpeg|jpg|gif|png)$/i) != null;
+  const isViewable = isImage || fileName?.match(/\.(pdf)$/i) != null;
+
+  if (!fileData) return null;
+
+  if (!isViewable) {
+      return (
+           <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-3 min-w-0 pr-4">
+                  <FileText className="w-8 h-8 text-[#007BFF] flex-shrink-0" />
+                  <div className="min-w-0">
+                      <p className="text-sm font-bold text-navy truncate">{fileName}</p>
+                      <p className="text-[11px] text-[#007BFF]">Click download to view original file</p>
+                  </div>
+              </div>
+              <a href={fileData} download={fileName} className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-white rounded-full text-[#007BFF] hover:bg-[#007BFF] hover:text-white transition-colors shadow-sm">
+                  <Download className="w-4 h-4" />
+              </a>
+           </div>
+      )
+  }
+
+  return (
+      <div className="flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm mt-2">
+          <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-2 min-w-0 pr-4">
+                  <FileText className="w-4 h-4 text-[#007BFF] flex-shrink-0" />
+                  <span className="text-xs font-bold text-navy truncate">{fileName}</span>
+              </div>
+              <a href={fileData} download={fileName} className="text-[#007BFF] hover:text-blue-700 p-1 flex-shrink-0" title="Download">
+                  <Download className="w-4 h-4" />
+              </a>
+          </div>
+          <div className="h-[350px] w-full bg-gray-100 relative flex items-center justify-center">
+              {isImage ? (
+                  <img src={fileData} alt="Document" className="max-w-full max-h-full object-contain p-2" />
+              ) : (
+                  <iframe src={fileData} className="w-full h-full absolute inset-0" title="Document Viewer" />
+              )}
+          </div>
+      </div>
+  )
+}
 
 export default function DevTasks() {
   const { currentUser } = useAuth();
@@ -231,23 +277,6 @@ export default function DevTasks() {
     );
   };
 
-  // --- THE FIX: KEEP SIDEBAR VISIBLE DURING INITIAL LOAD ---
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F5F7FA] overflow-x-hidden flex flex-col">
-        <DevTopBar />
-        <div className="flex max-w-[1600px] w-full mx-auto pt-6 px-4 md:px-6 gap-8 pb-10 h-[calc(100vh-80px)]">
-          <div className="hidden lg:block flex-shrink-0 h-full">
-            <DevSidebar />
-          </div>
-          <div className="flex-1 flex flex-col min-w-0 h-full items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-[#007BFF]" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const getPriorityColor = (p) => {
     if (p === 'High') return 'bg-red-50 text-red-600';
     if (p === 'Medium') return 'bg-orange-50 text-orange-600';
@@ -265,29 +294,51 @@ export default function DevTasks() {
   const isSelectedBaReject = selectedReq?.rejectionReason && !selectedReq.rejectionReason.startsWith('Client Feedback:');
   const isSelectedChangeReq = (selectedReq?.isChangeRequest || selectedReq?.rejectionReason?.startsWith('Client Feedback:')) && !isSelectedBaReject;
 
+  if (isLoading) {
+    return (
+      <div className="h-screen bg-[#F5F7FA] overflow-y-scroll flex flex-col">
+        <DevTopBar />
+        <div className="flex max-w-[1600px] w-full mx-auto pt-6 px-4 md:px-6 gap-8 pb-6 flex-1 min-h-0">
+          <div className="hidden lg:block w-[260px] flex-shrink-0 h-full">
+            <DevSidebar />
+          </div>
+          <div className="flex-1 flex flex-col min-w-0 items-center justify-center h-full">
+            <Loader2 className="w-8 h-8 animate-spin text-[#007BFF]" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#F5F7FA] overflow-x-hidden">
+    /* h-screen locks the page from scrolling internally. overflow-y-scroll forces the dummy external track so sizes align. */
+    <div className="h-screen bg-[#F5F7FA] overflow-y-scroll flex flex-col">
       <DevTopBar />
 
-      <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8 pb-10 h-[calc(100vh-80px)]">
-        <div className="hidden lg:block flex-shrink-0 h-full">
+      <div className="flex max-w-[1600px] w-full mx-auto pt-6 px-4 md:px-6 gap-8 pb-6 flex-1 min-h-0">
+        
+        <div className="hidden lg:block w-[260px] flex-shrink-0 h-full">
           <DevSidebar />
         </div>
 
         <div className="flex-1 flex flex-col min-w-0 h-full">
           
-          <div className="mb-6 flex-shrink-0">
+          <div className="mb-4 flex-shrink-0 mt-2">
             <h1 className="text-[20px] md:text-[24px] font-bold text-navy">My Tasks & Requirements</h1>
             <p className="text-[13px] md:text-[15px] text-gray-500 mt-1">Manage your to-do lists grouped by assigned requirements.</p>
           </div>
 
-          <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-6 bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col lg:flex-row w-full bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
             
-            <div className="w-full lg:w-1/3 lg:border-r border-gray-100 flex flex-col bg-[#FAFAFA] h-[300px] lg:h-full flex-shrink-0 lg:flex-shrink">
-              <div className="p-5 md:p-6 border-b border-gray-100 bg-white flex justify-between items-center">
-                <h3 className="font-bold text-navy text-[15px]">Assigned Projects</h3>
-                <span className="bg-blue-50 text-[#007BFF] text-xs font-bold px-2 py-1 rounded-full">{requirements.length}</span>
+            <div className="w-full lg:w-1/3 border-r border-gray-100 flex flex-col bg-[#FAFAFA] h-full flex-shrink-0 lg:flex-shrink">
+              <div className="p-5 md:p-6 border-b border-gray-100 bg-white flex-shrink-0">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-navy text-[15px]">Assigned Projects</h3>
+                  <span className="bg-blue-50 text-[#007BFF] text-xs font-bold px-2 py-1 rounded-full">{requirements.length}</span>
+                </div>
               </div>
+              
+              {/* Native scrollbar automatically appears with overflow-y-auto (NO CUSTOM WEBKIT CSS) */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {requirements.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-6">No requirements assigned to you.</p>
@@ -359,6 +410,7 @@ export default function DevTasks() {
                   <p className="text-sm mt-1">Choose a project from the left to see details and tasks.</p>
                 </div>
               ) : (
+                /* Native scrollbar automatically appears with overflow-y-auto (NO CUSTOM WEBKIT CSS) */
                 <div className="flex-1 overflow-y-auto">
                   
                   <div className="p-6 md:p-8 border-b border-gray-50 flex flex-col gap-4">
@@ -484,15 +536,25 @@ export default function DevTasks() {
                     </div>
                   )}
 
+                  {/* RESTORED: Display Document if text description is missing/short */}
                   <div className="p-6 md:p-8 border-b border-gray-50">
                     <h3 className="font-bold text-navy text-[15px] mb-4 flex items-center">
                       <User className="w-4 h-4 mr-2 text-[#007BFF]" /> Original Client Request
                     </h3>
-                    <div className="bg-gray-50 p-5 rounded-2xl text-[13px] text-gray-600 leading-relaxed whitespace-pre-wrap border border-gray-100">
-                      {selectedReq.description}
-                    </div>
+                    
+                    {selectedReq.description && selectedReq.description !== "No description provided." && (
+                      <div className="bg-gray-50 p-5 rounded-2xl text-[13px] text-gray-600 leading-relaxed whitespace-pre-wrap border border-gray-100 mb-4">
+                        {selectedReq.description}
+                      </div>
+                    )}
 
-                    {selectedReq.attachments && selectedReq.attachments.length > 0 && (
+                    {/* Inline Document Viewer exactly like the BA side! */}
+                    {selectedReq.fileName && selectedReq.fileName !== "No file attached" && (
+                      <DocumentViewer fileName={selectedReq.fileName} fileData={selectedReq.fileData} />
+                    )}
+
+                    {/* Fallback for regular attachments */}
+                    {!selectedReq.fileName && selectedReq.attachments && selectedReq.attachments.length > 0 && (
                       <div className="mt-5">
                         <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Attached Documents</h4>
                         <div className="flex flex-wrap gap-3">
@@ -515,6 +577,40 @@ export default function DevTasks() {
                     )}
                   </div>
 
+                  {/* RESTORED: Clarifications (Q&A) Section! */}
+                  {selectedReq.clarifications && selectedReq.clarifications.length > 0 && (
+                    <div className="p-6 md:p-8 border-b border-gray-50 bg-[#F8FAFC]">
+                      <h3 className="font-bold text-navy text-[15px] mb-4 flex items-center">
+                        <HelpCircle className="w-4 h-4 mr-2 text-[#007BFF]" /> Client Clarifications (Q&A)
+                      </h3>
+                      <div className="space-y-4">
+                        {selectedReq.clarifications.map((clar, idx) => (
+                           <div key={idx} className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+                              <div className="flex gap-3 mb-4">
+                                 <div className="w-6 h-6 rounded-full bg-blue-50 text-[#007BFF] flex items-center justify-center flex-shrink-0 text-xs font-bold">BA</div>
+                                 <div>
+                                   <p className="text-[11px] font-bold text-gray-400 mb-0.5">Question to Client</p>
+                                   <p className="text-[13px] text-navy font-medium">{clar.question}</p>
+                                 </div>
+                              </div>
+                              <div className="flex gap-3 ml-4 pl-4 border-l-2 border-gray-100">
+                                 <div className="w-6 h-6 rounded-full bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">C</div>
+                                 <div>
+                                   <p className="text-[11px] font-bold text-gray-400 mb-0.5">Client Answer</p>
+                                   {clar.answer ? (
+                                       <p className="text-[13px] text-gray-700">{clar.answer}</p>
+                                   ) : (
+                                       <p className="text-[12px] text-orange-500 italic">Waiting for client reply...</p>
+                                   )}
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* RESTORED: BA Analysis */}
                   {selectedReq.baAnalysis && (
                     <div className="p-6 md:p-8 border-b border-gray-50 bg-[#F4F9FF]">
                       <h3 className="font-bold text-navy text-[15px] mb-4 flex items-center">
@@ -599,7 +695,6 @@ export default function DevTasks() {
             </div>
 
           </div>
-
         </div>
       </div>
     </div>

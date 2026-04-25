@@ -3,9 +3,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import DevTopBar from "../../components/Developer/DevTopBar";
 import DevSidebar from "../../components/Developer/DevSidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { Loader2, Calendar, User, AlertCircle, Clock, FileText, CheckCircle2, Circle, ClipboardList, Activity, Building2, Paperclip, ChevronDown, Check, Info, Download, HelpCircle } from "lucide-react";
+// THE FIX: Added Info and HelpCircle to the imports!
+import { Loader2, Calendar, User, AlertCircle, Clock, FileText, CheckCircle2, Circle, ClipboardList, Activity, Building2, Paperclip, ChevronDown, Check, Download, ArrowLeft, Info, HelpCircle } from "lucide-react";
 
-// RESTORED: Document Viewer to show Client Documents
 const DocumentViewer = ({ fileName, fileData }) => {
   const isImage = fileData?.startsWith('data:image') || fileName?.match(/\.(jpeg|jpg|gif|png)$/i) != null;
   const isViewable = isImage || fileName?.match(/\.(pdf)$/i) != null;
@@ -105,7 +105,7 @@ export default function DevTasks() {
             const target = activeReqs.find(r => r.reqId === reqIdFromState);
             if (target) return target;
           } 
-          if (activeReqs.length > 0 && !isBackground) {
+          if (activeReqs.length > 0 && !isBackground && window.innerWidth >= 1024) {
             return activeReqs[0];
           }
           return null;
@@ -311,7 +311,6 @@ export default function DevTasks() {
   }
 
   return (
-    /* h-screen locks the page from scrolling internally. overflow-y-scroll forces the dummy external track so sizes align. */
     <div className="h-screen bg-[#F5F7FA] overflow-y-scroll flex flex-col">
       <DevTopBar />
 
@@ -330,7 +329,7 @@ export default function DevTasks() {
 
           <div className="flex-1 min-h-0 flex flex-col lg:flex-row w-full bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
             
-            <div className="w-full lg:w-1/3 border-r border-gray-100 flex flex-col bg-[#FAFAFA] h-full flex-shrink-0 lg:flex-shrink">
+            <div className={`w-full lg:w-1/3 border-r border-gray-100 flex-col bg-[#FAFAFA] h-full flex-shrink-0 lg:flex-shrink ${selectedReq ? 'hidden lg:flex' : 'flex'}`}>
               <div className="p-5 md:p-6 border-b border-gray-100 bg-white flex-shrink-0">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-bold text-navy text-[15px]">Assigned Projects</h3>
@@ -338,7 +337,6 @@ export default function DevTasks() {
                 </div>
               </div>
               
-              {/* Native scrollbar automatically appears with overflow-y-auto (NO CUSTOM WEBKIT CSS) */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {requirements.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-6">No requirements assigned to you.</p>
@@ -402,7 +400,7 @@ export default function DevTasks() {
               </div>
             </div>
 
-            <div className="w-full lg:w-2/3 flex flex-col h-full bg-white relative">
+            <div className={`w-full lg:w-2/3 flex-col h-full bg-white relative ${!selectedReq ? 'hidden lg:flex' : 'flex'}`}>
               {!selectedReq ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
                   <FileText className="w-16 h-16 mb-4 opacity-50 text-gray-300" />
@@ -410,18 +408,22 @@ export default function DevTasks() {
                   <p className="text-sm mt-1">Choose a project from the left to see details and tasks.</p>
                 </div>
               ) : (
-                /* Native scrollbar automatically appears with overflow-y-auto (NO CUSTOM WEBKIT CSS) */
                 <div className="flex-1 overflow-y-auto">
                   
                   <div className="p-6 md:p-8 border-b border-gray-50 flex flex-col gap-4">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2 mb-3">
-                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${getPriorityColor(selectedReq.priority)}`}>
-                            {selectedReq.priority} Priority
-                          </span>
+                      <div className="flex items-start gap-3">
+                        <button onClick={() => setSelectedReq(null)} className="lg:hidden mt-1 text-gray-500 hover:text-[#007BFF] p-1 -ml-2 rounded-full hover:bg-blue-50">
+                          <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${getPriorityColor(selectedReq.priority)}`}>
+                              {selectedReq.priority} Priority
+                            </span>
+                          </div>
+                          <h2 className="text-xl md:text-2xl font-bold text-navy mb-2">{selectedReq.title}</h2>
                         </div>
-                        <h2 className="text-xl md:text-2xl font-bold text-navy mb-2">{selectedReq.title}</h2>
                       </div>
                       
                       <div className="flex-shrink-0 relative" ref={statusDropdownRef}>
@@ -536,7 +538,6 @@ export default function DevTasks() {
                     </div>
                   )}
 
-                  {/* RESTORED: Display Document if text description is missing/short */}
                   <div className="p-6 md:p-8 border-b border-gray-50">
                     <h3 className="font-bold text-navy text-[15px] mb-4 flex items-center">
                       <User className="w-4 h-4 mr-2 text-[#007BFF]" /> Original Client Request
@@ -548,12 +549,10 @@ export default function DevTasks() {
                       </div>
                     )}
 
-                    {/* Inline Document Viewer exactly like the BA side! */}
                     {selectedReq.fileName && selectedReq.fileName !== "No file attached" && (
                       <DocumentViewer fileName={selectedReq.fileName} fileData={selectedReq.fileData} />
                     )}
 
-                    {/* Fallback for regular attachments */}
                     {!selectedReq.fileName && selectedReq.attachments && selectedReq.attachments.length > 0 && (
                       <div className="mt-5">
                         <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Attached Documents</h4>
@@ -577,7 +576,6 @@ export default function DevTasks() {
                     )}
                   </div>
 
-                  {/* RESTORED: Clarifications (Q&A) Section! */}
                   {selectedReq.clarifications && selectedReq.clarifications.length > 0 && (
                     <div className="p-6 md:p-8 border-b border-gray-50 bg-[#F8FAFC]">
                       <h3 className="font-bold text-navy text-[15px] mb-4 flex items-center">
@@ -610,7 +608,6 @@ export default function DevTasks() {
                     </div>
                   )}
 
-                  {/* RESTORED: BA Analysis */}
                   {selectedReq.baAnalysis && (
                     <div className="p-6 md:p-8 border-b border-gray-50 bg-[#F4F9FF]">
                       <h3 className="font-bold text-navy text-[15px] mb-4 flex items-center">

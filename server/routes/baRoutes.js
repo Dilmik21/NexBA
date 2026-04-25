@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 
-// 🚨 FIXED: Ensure case sensitivity matches your file name
 const baController = require('../controllers/baController'); 
 
 const { 
@@ -63,8 +62,10 @@ router.get('/changes', requireBaId, getChangeRequests);
 router.put('/changes/:crId/status', requireBaId, updateChangeStatus);
 
 router.get('/verification', requireBaId, getVerificationTasks);
-router.post('/verification/:taskId/approve', requireBaId, approveTaskVerification);
-router.post('/verification/:taskId/reject', requireBaId, rejectTaskVerification);
+
+// THE FIX: Changed from router.post to router.put to match the frontend fetch calls!
+router.put('/verification/:taskId/approve', requireBaId, approveTaskVerification);
+router.put('/verification/:taskId/reject', requireBaId, rejectTaskVerification);
 
 router.get('/chat/list', requireBaId, getChatRequirements);
 router.get('/chat/:reqId/:channel', requireBaId, getChatMessages);

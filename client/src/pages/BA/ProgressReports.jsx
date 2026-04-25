@@ -3,6 +3,7 @@ import BATopBar from "../../components/BA/BATopBar";
 import BASidebar from "../../components/BA/BASidebar";
 import { useAuth } from "../../contexts/AuthContext";
 import { Download, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 
@@ -10,9 +11,11 @@ export default function ProgressReports() {
   const { currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const navigate = useNavigate();
+  
   const [data, setData] = useState({
     stats: { reqs: 0, tasks: 0, verifications: 0, changes: 0 },
-    timeline: []
+    clientTimeline: [] // THE FIX: Uses the unfiltered array!
   });
 
   useEffect(() => {
@@ -28,7 +31,7 @@ export default function ProgressReports() {
       if (json.success) {
         setData({
           stats: json.data.stats || { reqs: 0, tasks: 0, verifications: 0, changes: 0 },
-          timeline: json.data.timeline || []
+          clientTimeline: json.data.clientTimeline || []
         });
       }
     } catch (error) {
@@ -72,32 +75,49 @@ export default function ProgressReports() {
     }
   };
 
-  // NEW: Exact logic from the Client side to color-code the stages!
-  const getStageStyle = (stage) => {
+  const formatUpdatedTime = (rawDate) => {
+    if (!rawDate) return "Recently updated";
+    try {
+      let d = new Date();
+      if (typeof rawDate === 'string' || typeof rawDate === 'number') {
+        d = new Date(rawDate);
+      } else if (rawDate._seconds) {
+        d = new Date(rawDate._seconds * 1000); 
+      } else if (rawDate.seconds) {
+        d = new Date(rawDate.seconds * 1000); 
+      }
+      if (isNaN(d.getTime())) return "Recently updated"; 
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (err) {
+      return "Recently updated";
+    }
+  };
+
+  const getStageDetails = (stage) => {
     const s = stage?.toLowerCase() || "";
-    if (s === "pending ba review") return "bg-gray-100 text-gray-600 border border-gray-200";
-    if (s.includes("analysis")) return "bg-yellow-50 text-yellow-700 border border-yellow-200";
-    if (s.includes("clarification")) return "bg-red-50 text-red-600 border border-red-200";
-    if (s.includes("sent to engineering")) return "bg-blue-50 text-blue-500 border border-blue-200";
-    if (s.includes("in progress")) return "bg-blue-100 text-blue-700 border border-blue-300";
-    if (s.includes("ready for review")) return "bg-teal-50 text-teal-700 border border-teal-200";
-    if (s.includes("pending verification") || s.includes("awaiting verification")) return "bg-purple-50 text-purple-700 border border-purple-200";
-    if (s.includes("change requested") || s.includes("modification requested")) return "bg-orange-50 text-orange-600 border border-orange-200";
-    if (s.includes("uat") || s.includes("pending approval")) return "bg-indigo-50 text-indigo-600 border border-indigo-200";
-    if (s.includes("complete") || s.includes("done") || s.includes("approved") || s.includes("live")) return "bg-green-50 text-green-700 border border-green-200";
-    return "bg-gray-50 text-gray-500 border border-gray-200";
+    
+    if (s === "pending ba review") return { badgeBg: "bg-gray-100", badgeText: "text-gray-600", barColor: "bg-gray-400", fallbackProgress: 10, displayStage: "Pending BA Review" };
+    if (s.includes("analysis")) return { badgeBg: "bg-yellow-100", badgeText: "text-yellow-700", barColor: "bg-yellow-500", fallbackProgress: 20, displayStage: "Analysis" };
+    if (s.includes("clarification")) return { badgeBg: "bg-red-100", badgeText: "text-red-600", barColor: "bg-red-500", fallbackProgress: 20, displayStage: "Paused: Client Input" };
+    if (s.includes("sent to engineering")) return { badgeBg: "bg-blue-100", badgeText: "text-blue-600", barColor: "bg-blue-400", fallbackProgress: 30, displayStage: "Queued for Dev" };
+    if (s.includes("in progress")) return { badgeBg: "bg-blue-100", badgeText: "text-blue-800", barColor: "bg-blue-600", fallbackProgress: 50, displayStage: "Development" };
+    if (s.includes("ready for review")) return { badgeBg: "bg-teal-100", badgeText: "text-teal-700", barColor: "bg-teal-500", fallbackProgress: 70, displayStage: "Dev Complete" };
+    if (s.includes("pending verification") || s.includes("awaiting verification")) return { badgeBg: "bg-purple-100", badgeText: "text-purple-700", barColor: "bg-purple-500", fallbackProgress: 80, displayStage: "Internal Review" };
+    if (s.includes("change requested") || s.includes("modification requested")) return { badgeBg: "bg-orange-100", badgeText: "text-orange-700", barColor: "bg-orange-500", fallbackProgress: 85, displayStage: "Revising Scope" };
+    if (s.includes("uat") || s.includes("pending approval")) return { badgeBg: "bg-indigo-100", badgeText: "text-indigo-700", barColor: "bg-indigo-500", fallbackProgress: 90, displayStage: "Ready for UAT" };
+    if (s.includes("complete") || s.includes("done") || s.includes("approved") || s.includes("live")) return { badgeBg: "bg-green-100", badgeText: "text-green-700", barColor: "bg-green-500", fallbackProgress: 100, displayStage: "Completed" };
+      
+    return { badgeBg: "bg-gray-100", badgeText: "text-gray-600", barColor: "bg-gray-400", fallbackProgress: 0, displayStage: stage || "Unknown" };
   };
 
   return (
-    /* THE FIX: Changed to min-h-screen to allow the entire window to scroll externally */
     <div className="min-h-screen bg-[#F5F7FA]">
       <BATopBar />
 
       <div className="flex max-w-[1600px] w-full mx-auto pt-6 px-4 md:px-6 gap-8 pb-10">
         
         <div className="hidden lg:block w-[260px] flex-shrink-0">
-          {/* THE FIX: Added a sticky wrapper so the sidebar follows you down the page */}
-          <div className="sticky top-24 h-[calc(100vh-120px)]">
+          <div className="sticky top-6">
              <BASidebar />
           </div>
         </div>
@@ -121,12 +141,12 @@ export default function ProgressReports() {
           </div>
 
           {isLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
+            <div className="flex flex-col items-center justify-center py-20">
                <Loader2 className="w-10 h-10 animate-spin text-[#007BFF] mb-4" />
                <p className="font-bold text-navy">Compiling Report Data...</p>
             </div>
           ) : (
-            <div id="report-content" className="space-y-6 bg-[#F5F7FA] p-2">
+            <div id="report-content" className="space-y-6">
               
               {/* KPI CARDS */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -164,42 +184,60 @@ export default function ProgressReports() {
                 </div>
               </div>
 
-              {/* NEW: Replaced the percentage bars with the clean Client-style Status Tracker Table! */}
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                  <h2 className="text-[16px] font-extrabold text-navy">Project Status Tracking</h2>
+              {/* CLIENT-STYLE PROGRESS BARS SECTION */}
+              <div className="bg-white rounded-3xl md:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 overflow-hidden mt-6 md:mt-8">
+                
+                <div className="px-5 py-4 md:px-8 md:py-6 border-b border-gray-50 flex items-center">
+                  <h2 className="text-base md:text-lg font-bold text-navy">Project Progress Timeline</h2>
                 </div>
                 
-                {data.timeline.length === 0 ? (
-                    <div className="text-center py-10 text-sm text-gray-400 italic">No active projects found to report.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-white border-b border-gray-100">
-                        <tr>
-                          <th className="py-5 px-6 text-[11px] font-bold text-gray-400 uppercase tracking-widest w-[15%]">Project ID</th>
-                          <th className="py-5 px-6 text-[11px] font-bold text-gray-400 uppercase tracking-widest w-[35%]">Title</th>
-                          <th className="py-5 px-6 text-[11px] font-bold text-gray-400 uppercase tracking-widest w-[25%]">Client Name</th>
-                          <th className="py-5 px-6 text-[11px] font-bold text-gray-400 uppercase tracking-widest w-[25%]">Current Stage</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {data.timeline.map((item, index) => (
-                          <tr key={index} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="py-5 px-6 text-xs font-bold text-[#007BFF] tracking-wider">{item.reqId}</td>
-                            <td className="py-5 px-6 font-bold text-navy truncate max-w-xs">{item.title}</td>
-                            <td className="py-5 px-6 text-sm text-gray-500">{item.clientName}</td>
-                            <td className="py-5 px-6">
-                              <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full whitespace-nowrap shadow-sm ${getStageStyle(item.stage)}`}>
-                                {item.stage}
+                <div className="p-5 md:p-8 space-y-6">
+                  {data.clientTimeline.length === 0 ? (
+                      <div className="text-center py-6 text-gray-400 text-[13px] md:text-sm">No active projects found to report.</div>
+                  ) : (
+                    data.clientTimeline.map((req, index) => {
+                      const { badgeBg, badgeText, barColor, fallbackProgress, displayStage } = getStageDetails(req.clientStage);
+                      const displayProgress = fallbackProgress; 
+                      const displayDate = formatUpdatedTime(req.rawDate);
+                      
+                      return (
+                        <div key={index} className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 border-b border-gray-50 pb-6 md:border-0 md:pb-0 last:border-0 last:pb-0">
+                          
+                          <div className="w-full md:w-1/3 min-w-0 pr-2">
+                            <p className="text-[10px] md:text-[11px] font-bold text-gray-400 uppercase tracking-wider">{req.reqId}</p>
+                            <p className="text-[13px] md:text-sm font-semibold text-navy mt-0.5 truncate">{req.title}</p>
+                            <p className="text-[10px] md:text-[11px] text-gray-400 font-medium mt-1">Client: {req.clientName} • Updated: {displayDate}</p>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row sm:items-center w-full md:w-2/3 gap-3 md:gap-4">
+                            
+                            <div className="flex-shrink-0 w-full sm:w-32 md:w-36">
+                              <span className={`text-[10px] md:text-[11px] font-bold px-3 py-1.5 rounded-md block text-center whitespace-nowrap shadow-sm ${badgeBg} ${badgeText}`}>
+                                {displayStage}
                               </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                            </div>
+
+                            <div className="flex-1 flex items-center min-w-0">
+                              <div className="w-full bg-gray-100 rounded-full h-2.5 md:h-3 relative overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-1000 ease-out ${barColor}`} 
+                                  style={{ width: `${displayProgress}%` }}
+                                >
+                                </div>
+                              </div>
+                              <span className="text-[11px] md:text-[13px] font-bold text-gray-600 ml-3 w-8 text-right flex-shrink-0">
+                                {displayProgress}%
+                              </span>
+                            </div>
+
+                            {/* THE FIX: Quick Update button has been successfully removed */}
+
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
             </div>

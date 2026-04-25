@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import DevTopBar from "../../components/Developer/DevTopBar";
 import DevSidebar from "../../components/Developer/DevSidebar";
 import { useAuth } from "../../contexts/AuthContext";
-import { Loader2, Search, AlertTriangle, Link as LinkIcon, FileText, UploadCloud, CheckCircle2, X, Info, Clock } from "lucide-react";
+// THE FIX: Added ExternalLink and Download to the imports!
+import { Loader2, Search, AlertTriangle, Link as LinkIcon, FileText, UploadCloud, CheckCircle2, X, Info, Clock, ArrowLeft, ExternalLink, Download } from "lucide-react";
 
 export default function SubmitEvidence() {
   const { currentUser } = useAuth();
@@ -42,7 +43,7 @@ export default function SubmitEvidence() {
           const updated = activeSubmissions.find(c => c.reqId === prev.reqId);
           return updated || null; 
         }
-        if (activeSubmissions.length > 0 && !isBackground) {
+        if (activeSubmissions.length > 0 && !isBackground && window.innerWidth >= 1024) {
           return activeSubmissions[0];
         }
         return null;
@@ -163,7 +164,7 @@ export default function SubmitEvidence() {
 
           <div className="flex-1 min-h-0 flex flex-col lg:flex-row w-full bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
             
-            <div className="w-full lg:w-[35%] flex flex-col bg-[#FAFAFA] border-r border-gray-100 h-full flex-shrink-0 lg:flex-shrink">
+            <div className={`w-full lg:w-[35%] flex-col bg-[#FAFAFA] border-r border-gray-100 h-full flex-shrink-0 lg:flex-shrink ${selectedReq ? 'hidden lg:flex' : 'flex'}`}>
               <div className="p-5 border-b border-gray-100 bg-white flex-shrink-0">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-bold text-navy text-[15px]">Pending Review & Submissions</h3>
@@ -239,7 +240,7 @@ export default function SubmitEvidence() {
               </div>
             </div>
 
-            <div className="w-full lg:w-[65%] flex flex-col h-full bg-white relative min-w-0">
+            <div className={`w-full lg:w-[65%] flex-col h-full bg-white relative min-w-0 ${!selectedReq ? 'hidden lg:flex' : 'flex'}`}>
               
               {!selectedReq ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-[#F8FAFC]">
@@ -249,9 +250,14 @@ export default function SubmitEvidence() {
                 </div>
               ) : (
                 <>
-                  <div className="p-6 md:p-8 border-b border-gray-100 bg-white flex-shrink-0 z-10">
-                    <span className="text-[12px] font-bold text-[#007BFF] bg-blue-50 px-2 py-1 rounded-md mb-3 inline-block">{selectedReq.reqId}</span>
-                    <h2 className="text-[20px] md:text-[24px] font-bold text-navy">{selectedReq.title}</h2>
+                  <div className="p-6 md:p-8 border-b border-gray-100 bg-white flex-shrink-0 z-10 flex items-start gap-3">
+                    <button onClick={() => setSelectedReq(null)} className="lg:hidden mt-1 text-gray-500 hover:text-[#007BFF] p-1 -ml-2 rounded-full hover:bg-blue-50">
+                      <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <div>
+                      <span className="text-[12px] font-bold text-[#007BFF] bg-blue-50 px-2 py-1 rounded-md mb-3 inline-block">{selectedReq.reqId}</span>
+                      <h2 className="text-[20px] md:text-[24px] font-bold text-navy">{selectedReq.title}</h2>
+                    </div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[#F8FAFC]">

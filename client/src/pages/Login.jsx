@@ -12,12 +12,11 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   
   const [error, setError] = useState("");
-  const [message, setMessage] = useState(""); // For the success email message
+  const [message, setMessage] = useState(""); 
   const [loading, setLoading] = useState(false);
   
-  const [isResetting, setIsResetting] = useState(false); // Toggle between Login and Reset modes
+  const [isResetting, setIsResetting] = useState(false); 
   
-  // Bring in both login and resetPassword from context
   const { login, resetPassword } = useAuth(); 
   const navigate = useNavigate();
 
@@ -71,16 +70,25 @@ export default function Login() {
         navigate("/dashboard"); 
       } catch (err) {
         console.error("Login Error:", err.code);
-        if (err.code === 'auth/user-not-found') {
+        
+        // PROPER ERROR HANDLING FOR FIREBASE
+        if (err.code === 'auth/invalid-credential') {
+          // Firebase combined wrong-password and user-not-found into this one code for security
+          setError("Invalid email or password. Please check your credentials and try again.");
+        } else if (err.code === 'auth/user-not-found') { 
+          // Legacy support just in case
           setError("No account found with this email. Please register first.");
-        } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        } else if (err.code === 'auth/wrong-password') {
+          // Legacy support just in case
           setError("Incorrect password. Please check your password and try again.");
         } else if (err.code === 'auth/too-many-requests') {
           setError("Too many failed attempts. Please try again later or reset your password.");
         } else if (err.code === 'auth/invalid-email') {
-          setError("Please enter a valid email address.");
+          setError("The email address is badly formatted. Please check for typos.");
+        } else if (err.code === 'auth/user-disabled') {
+          setError("This account has been disabled. Please contact support.");
         } else {
-          setError("Failed to sign in. Please try again.");
+          setError("Failed to sign in. Please check your connection and try again.");
         }
       }
     }
@@ -116,7 +124,6 @@ export default function Login() {
           </p>
         )}
 
-        {/* Padding applied here so standard login doesn't jump weirdly */}
         {!isResetting && <div className="h-4 md:h-6"></div>}
 
         {error && <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl mb-6 text-sm text-center sm:text-left font-medium">{error}</div>}

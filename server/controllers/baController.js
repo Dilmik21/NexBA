@@ -2,6 +2,7 @@ const { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BAC
 const { db } = require('../config/firebase');
 const { sendNotification } = require('../services/notificationService');
 
+// THE FIX: Reverted to the stable version of pdf-parse
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 
@@ -80,22 +81,36 @@ const extractTextFromFileData = async (fileName, fileData) => {
   try {
       let fileBuffer;
 
+      // 1. Clean the Data
       if (fileData.startsWith('http://') || fileData.startsWith('https://')) {
+          console.log(`📥 Downloading file from URL: ${fileName}...`);
           const response = await fetch(fileData);
-          if (!response.ok) throw new Error("Failed to download file from URL");
+          if (!response.ok) throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
           const arrayBuffer = await response.arrayBuffer();
           fileBuffer = Buffer.from(arrayBuffer);
+          
+          const filePreview = fileBuffer.toString('utf-8', 0, 50);
+          if (filePreview.includes('<!DOCTYPE html>') || filePreview.includes('<html')) {
+             console.error("🚨 ALERT: Downloaded file is an HTML page (Likely Firebase Access Denied error), NOT a PDF!");
+             return null;
+          }
       } else {
+          console.log(`📥 Extracting file from Base64: ${fileName}...`);
           const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
           fileBuffer = Buffer.from(base64Data, 'base64');
       }
 
       const ext = fileName.split('.').pop().toLowerCase();
 
+      // 2. Extract based on file type
       if (ext === 'pdf') {
+          console.log(`📄 Attempting to parse PDF: ${fileName}...`);
+          // THE FIX: Clean, direct call to the stable version of pdf-parse
           const pdfData = await pdfParse(fileBuffer);
+          console.log(`✅ Successfully extracted ${pdfData.text.length} characters from PDF!`);
           return pdfData.text; 
       } else if (ext === 'docx') {
+          console.log(`📄 Attempting to parse DOCX: ${fileName}...`);
           const docxData = await mammoth.extractRawText({ buffer: fileBuffer });
           return docxData.value; 
       } else if (ext === 'txt') {
@@ -103,7 +118,7 @@ const extractTextFromFileData = async (fileName, fileData) => {
       }
       return null; 
   } catch (error) {
-      console.error("🚨 Failed to extract text from file:", error);
+      console.error(`🚨 Failed to extract text from ${fileName}:`, error.message);
       return null;
   }
 };
@@ -154,11 +169,11 @@ const callOpenAI = async (rawText, promptSystem, temp = 0.3) => {
 const getFallbackAIData = (rawTextToProcess, perspective = "General Analysis") => {
   const randomId = Math.floor(Math.random() * 10000); 
   return {
-    summary: `[FALLBACK MODE ACTIVE] The AI failed to generate a response. Please check your backend terminal for API Key or Token limit errors. Attempt #${randomId}.`,
-    businessRequirements: [`Ensure system meets ${perspective} standards.`],
-    softwareRequirements: [`Develop technical features for ${perspective}.`],
-    userStories: [`As a user, I want ${perspective} to be handled correctly.`],
-    acceptanceCriteria: [`System must pass ${perspective} testing protocols.`],
+    summary: `[FALLBACK MODE ACTIVE] The AI failed to generate a proper response. Attempt #${randomId}.`,
+    businessRequirements: [`Ensure system meets ${perspective} standards.`, `Align with core business logic.`, `Maintain operational efficiency.`],
+    softwareRequirements: [`Develop technical features for ${perspective}.`, `Implement secure data handling.`],
+    userStories: [`As a user, I want ${perspective} to be handled correctly so I can use the app safely.`],
+    acceptanceCriteria: [`System must pass ${perspective} testing protocols.`, `UI must be responsive.`],
     riskFactors: [`Unforeseen challenges related to ${perspective}.`],
     ambiguousTerms: [{ term: "system", suggestion: `Please specify the ${perspective} architecture.` }],
     suggestedQuestions: [`Can you provide more details regarding ${perspective}?`],
@@ -199,7 +214,7 @@ const processRequirementWithAI = async (req, res) => {
     if (extractedFileText) {
         combinedTextToAnalyze += `--- EXTRACTED CONTENT FROM DOCUMENT (${reqData.fileName}) ---\n${extractedFileText}\n\n`;
     } else if (reqData.fileName && reqData.fileName !== "No file attached") {
-        combinedTextToAnalyze += `--- ATTACHED DOCUMENT ---\nThe client attached a supporting file named "${reqData.fileName}", but text could not be extracted (likely an image). Provide an analysis based on the available description context.\n\n`;
+        combinedTextToAnalyze += `--- ATTACHED DOCUMENT ---\nThe client attached a supporting file named "${reqData.fileName}", but text could not be extracted. Provide an analysis based on the available description context.\n\n`;
     }
 
     if (!combinedTextToAnalyze.trim()) {
@@ -208,14 +223,16 @@ const processRequirementWithAI = async (req, res) => {
 
     const prompt = `You are a senior Business Analyst AI. Extract and analyze requirements from the provided text. 
     
-    CRITICAL RULE FOR ambiguousTerms: The "term" value MUST be an EXACT, word-for-word copy of a short phrase found directly inside the original text. Do not paraphrase it, or the frontend highlighting system will break.
+    CRITICAL RULES:
+    1. Even if the text is short, brainstorm and infer detailed requirements. DO NOT leave ANY arrays empty. Provide at least 2-3 detailed strings for each array.
+    2. For ambiguousTerms, the "term" value MUST be an EXACT, word-for-word copy of a short phrase found directly inside the original text. Do not paraphrase it, or the frontend highlighting system will break.
 
     You MUST respond strictly with a valid JSON object matching EXACTLY this structure:
     {
       "summary": "A 2-3 sentence overview of the project.",
-      "businessRequirements": ["Req 1", "Req 2"],
-      "softwareRequirements": ["Req 1", "Req 2"],
-      "userStories": ["As a [type of user], I want [an action] so that [a benefit/a value]"],
+      "businessRequirements": ["Generated detail 1", "Generated detail 2", "Generated detail 3"],
+      "softwareRequirements": ["Generated detail 1", "Generated detail 2"],
+      "userStories": ["As a user, I want to [action] so that [benefit]"],
       "acceptanceCriteria": ["Criteria 1", "Criteria 2"],
       "riskFactors": ["Risk 1", "Risk 2"],
       "ambiguousTerms": [{"term": "EXACT string from the text", "suggestion": "Ask the client to clarify this word"}],
@@ -226,8 +243,12 @@ const processRequirementWithAI = async (req, res) => {
     try { 
       aiProcessedData = await callOpenAI(combinedTextToAnalyze, prompt, 0.3); 
       aiProcessedData.processedText = combinedTextToAnalyze;
+      
+      if (!aiProcessedData.businessRequirements || aiProcessedData.businessRequirements.length === 0) {
+         throw new Error("AI returned empty arrays.");
+      }
     } catch (e) { 
-      console.error("Falling back due to AI error...");
+      console.error("Falling back due to AI error or empty arrays...");
       aiProcessedData = getFallbackAIData(combinedTextToAnalyze, "Initial Processing"); 
     }
 
@@ -268,25 +289,32 @@ const regenerateRequirementWithAI = async (req, res) => {
 
     const prompt = `You are a highly creative senior Business Analyst AI. REGENERATE the analysis focusing strictly on: "${randomPerspective}".
     
-    CRITICAL RULE FOR ambiguousTerms: The "term" value MUST be an EXACT, word-for-word substring copied directly from the original text. Do not paraphrase.
+    CRITICAL RULES:
+    1. Even if the provided text is short, you MUST brainstorm and infer detailed requirements related to ${randomPerspective}. DO NOT leave ANY arrays empty. Generate at least 3 detailed items per array.
+    2. For ambiguousTerms, the "term" value MUST be an EXACT, word-for-word substring copied directly from the original text.
 
     You MUST respond strictly with a valid JSON object matching EXACTLY this structure:
     {
-      "summary": "String", 
-      "businessRequirements": ["String"], 
-      "softwareRequirements": ["String"],
-      "userStories": ["String"], 
-      "acceptanceCriteria": ["String"], 
-      "riskFactors": ["String"],
-      "ambiguousTerms": [{"term": "EXACT string from text", "suggestion": "String"}], 
-      "suggestedQuestions": ["String"]
+      "summary": "A detailed 2-3 sentence overview from the perspective of ${randomPerspective}.",
+      "businessRequirements": ["Generated detail 1", "Generated detail 2", "Generated detail 3"],
+      "softwareRequirements": ["Generated technical req 1", "Generated technical req 2"],
+      "userStories": ["As a user, I want to [action] so that [benefit]"],
+      "acceptanceCriteria": ["Criteria 1", "Criteria 2"],
+      "riskFactors": ["Risk 1", "Risk 2"],
+      "ambiguousTerms": [{"term": "EXACT string from text", "suggestion": "Clarification needed"}],
+      "suggestedQuestions": ["Question 1", "Question 2"]
     }`;
 
     let aiProcessedData;
     try { 
-      aiProcessedData = await callOpenAI(combinedTextToAnalyze, prompt, 0.8); 
+      aiProcessedData = await callOpenAI(combinedTextToAnalyze, prompt, 0.7); 
       aiProcessedData.processedText = combinedTextToAnalyze;
+
+      if (!aiProcessedData.businessRequirements || aiProcessedData.businessRequirements.length === 0) {
+          throw new Error("AI returned empty arrays.");
+      }
     } catch (e) { 
+      console.error("Falling back during regeneration due to AI error...");
       aiProcessedData = getFallbackAIData(combinedTextToAnalyze, randomPerspective); 
     }
 

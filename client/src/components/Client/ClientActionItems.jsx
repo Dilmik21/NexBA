@@ -22,7 +22,6 @@ export default function ClientActionItems() {
   const fetchActionItems = async (uid) => {
     try {
       setIsLoading(true);
-      // FIXED: Added ?uid= to the URL
       const response = await fetch(`http://localhost:5000/api/client/action-items?uid=${uid}`);
       const result = await response.json();
       if (result.success) {
@@ -48,7 +47,8 @@ export default function ClientActionItems() {
               {data.pendingApprovals.length}
             </span>
           </div>
-          <Link to="/dashboard/approvals" className="text-xs md:text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors whitespace-nowrap pl-2">
+          {/* THE FIX: Corrected the route from /dashboard/approvals to /client/approvals */}
+          <Link to="/client/approvals" className="text-xs md:text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors whitespace-nowrap pl-2">
             View All <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1" />
           </Link>
         </div>
@@ -67,7 +67,12 @@ export default function ClientActionItems() {
                   <p className="text-[13px] md:text-sm font-bold text-navy truncate">{item.title}</p>
                   <p className="text-[11px] md:text-xs text-gray-500 mt-1 truncate">{item.id} · {item.meta}</p>
                 </div>
-                <Link to={`/dashboard/approvals`} className="flex-shrink-0 text-[11px] md:text-sm font-bold text-primary border border-primary px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl hover:bg-blue-50 transition-colors">
+                {/* THE FIX: Corrected route and added state to auto-select the project on the next page */}
+                <Link 
+                  to="/client/approvals" 
+                  state={{ id: item.id }} 
+                  className="flex-shrink-0 text-[11px] md:text-sm font-bold text-primary border border-primary px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl hover:bg-blue-50 transition-colors"
+                >
                   Review
                 </Link>
               </div>
@@ -86,7 +91,8 @@ export default function ClientActionItems() {
               {data.clarificationsNeeded.length}
             </span>
           </div>
-          <Link to="/dashboard/clarifications" className="text-xs md:text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors whitespace-nowrap pl-2">
+          {/* THE FIX: Corrected the route from /dashboard/clarifications to /client/clarifications */}
+          <Link to="/client/clarifications" className="text-xs md:text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors whitespace-nowrap pl-2">
             View All <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1" />
           </Link>
         </div>
@@ -106,7 +112,12 @@ export default function ClientActionItems() {
                   <p className="text-[11px] md:text-xs text-gray-500 mt-1 truncate">{item.id} · {item.meta}</p>
                   <p className="text-[11px] md:text-xs text-gray-600 italic mt-2 border-l-2 border-red-200 pl-2 line-clamp-2 md:line-clamp-none">{item.quote}</p>
                 </div>
-                <Link to={`/dashboard/clarifications`} className="flex-shrink-0 text-[11px] md:text-sm font-bold text-red-500 border border-red-500 px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl hover:bg-red-50 transition-colors">
+                {/* THE FIX: Corrected route and added state to auto-select the project */}
+                <Link 
+                  to="/client/clarifications" 
+                  state={{ id: item.id }} 
+                  className="flex-shrink-0 text-[11px] md:text-sm font-bold text-red-500 border border-red-500 px-3 py-1.5 md:px-4 md:py-2 rounded-lg md:rounded-xl hover:bg-red-50 transition-colors"
+                >
                   Respond
                 </Link>
               </div>

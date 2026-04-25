@@ -779,7 +779,6 @@ class BACommunicationModel {
   }
 }
 
-// --- NEW: Contains all Group logic for the BA ---
 class BACommunicationHubModel {
   static async getChatRequirementsList(baId) {
     const reqsSnap = await db.collection('requirements').get();
@@ -803,7 +802,6 @@ class BACommunicationHubModel {
       const data = doc.data();
       const reqId = data.reqId || `REQ-${doc.id.substring(0, 4).toUpperCase()}`;
       
-      // Only include requirements the BA has claimed or created
       if (!data.baId || data.baId === baId) {
           reqIds.push(reqId);
 
@@ -846,11 +844,9 @@ class BACommunicationHubModel {
 
     if (reqIds.length === 0) return [];
     
-    // Check for unread messages across all 3 channels
     const msgsSnap = await db.collection('messages').where('read', '==', false).get();
     msgsSnap.forEach(doc => {
       const msg = doc.data();
-      // Skip if I sent it
       if (msg.senderRole === 'BA' || msg.senderId === baId) return;
 
       if (reqIds.includes(msg.reqId)) {
@@ -948,18 +944,39 @@ class BACommunicationHubModel {
 
 class BAProgressModel {
   static async getProgressData(baId) {
-    const reqSnap = await db.collection('requirements').where('baId', '==', baId).get();
+    // We need to fetch ALL requirements (unassigned, or assigned to me) for the new Client Timeline
+    const allReqsSnap = await db.collection('requirements').get();
     let myReqs = [];
-    reqSnap.forEach(doc => myReqs.push({ id: doc.id, ...doc.data() }));
+    let allSystemReqs = []; 
+    let reqsThisWeek = 0;
+    
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+    allReqsSnap.forEach(doc => {
+        const data = doc.data();
+        const reqDate = data.updatedAt?.toDate ? data.updatedAt.toDate() : (data.submittedAt?.toDate ? data.submittedAt.toDate() : new Date(0));
+
+        if (data.baId === baId || !data.baId || data.baId === "") {
+            allSystemReqs.push({ id: doc.id, ...data });
+            
+            if (reqDate > oneWeekAgo) reqsThisWeek++;
+            
+            if (data.baId === baId) {
+                myReqs.push({ id: doc.id, ...data });
+            }
+        }
+    });
+
+    // 1. THE DEVELOPER TIMELINE (Math based, filtered)
     const tasksSnap = await db.collection('tasks').get().catch(() => ({ empty: true, forEach: () => {} }));
     let tasksByReq = {};
-    
+
     if (!tasksSnap.empty) {
         tasksSnap.forEach(doc => {
             const t = doc.data();
             if (!tasksByReq[t.reqId]) tasksByReq[t.reqId] = { total: 0, completed: 0 };
-            
+
             tasksByReq[t.reqId].total++;
             if (['Completed', 'Done', 'Client UAT', 'Pending Verification', 'Ready for Review'].includes(t.status)) {
                 tasksByReq[t.reqId].completed++;
@@ -968,33 +985,32 @@ class BAProgressModel {
     }
 
     let timeline = [];
+    const terminalStatuses = ['Completed', 'Done', 'Approved & Live', 'Closed'];
 
     myReqs.forEach(req => {
         const reqId = req.reqId || `REQ-${req.id.substring(0,4).toUpperCase()}`;
-        const status = req.status || "";
+        const status = req.status || "Pending BA Review";
         const taskData = tasksByReq[reqId] || { total: 0, completed: 0 };
-        
-        const terminalStatuses = ['Completed', 'Done', 'Approved & Live', 'Closed'];
 
         if (taskData.total > 0 && !terminalStatuses.includes(status)) {
             let progress = Math.round((taskData.completed / taskData.total) * 100);
-            
+
             let stage = 'To Do', stageColor = 'bg-gray-100 text-gray-600', barColor = 'bg-yellow-400';
-            
-            if (progress > 0 && progress < 80) { 
-               stage = 'Development'; stageColor = 'bg-blue-100 text-blue-700'; barColor = 'bg-[#007BFF]'; 
-            } else if (progress >= 80 && progress < 100) { 
-               stage = 'Review'; stageColor = 'bg-yellow-100 text-yellow-700'; barColor = 'bg-green-600'; 
-            } else if (progress === 100) { 
-               stage = 'Dev Complete'; stageColor = 'bg-green-100 text-green-700'; barColor = 'bg-green-500'; 
+
+            if (progress > 0 && progress < 80) {
+               stage = 'Development'; stageColor = 'bg-blue-100 text-blue-700'; barColor = 'bg-[#007BFF]';
+            } else if (progress >= 80 && progress < 100) {
+               stage = 'Review'; stageColor = 'bg-yellow-100 text-yellow-700'; barColor = 'bg-green-600';
+            } else if (progress === 100) {
+               stage = 'Dev Complete'; stageColor = 'bg-green-100 text-green-700'; barColor = 'bg-green-500';
             }
 
-            timeline.push({ 
-                reqId, 
-                title: req.title || "Untitled Requirement", 
-                stage, 
-                stageColor, 
-                barColor, 
+            timeline.push({
+                reqId,
+                title: req.title || "Untitled Requirement",
+                stage,
+                stageColor,
+                barColor,
                 progress,
                 rawDate: req.updatedAt || req.submittedAt || 0
             });
@@ -1002,8 +1018,38 @@ class BAProgressModel {
     });
 
     timeline.sort((a,b) => (b.rawDate?.toMillis ? b.rawDate.toMillis() : 0) - (a.rawDate?.toMillis ? a.rawDate.toMillis() : 0));
-    
-    return { timeline };
+
+    // 2. THE NEW CLIENT TIMELINE (Stage mapping, ALL items)
+    let clientTimeline = [];
+    allSystemReqs.forEach(req => {
+         const reqId = req.reqId || `REQ-${req.id.substring(0,4).toUpperCase()}`;
+         
+         clientTimeline.push({
+             reqId,
+             title: req.title || "Untitled Requirement",
+             clientStage: req.status || "Pending BA Review",
+             clientName: req.clientName || "Unknown Client",
+             rawDate: req.updatedAt || req.submittedAt || 0
+         });
+    });
+
+    clientTimeline.sort((a,b) => (b.rawDate?.toMillis ? b.rawDate.toMillis() : 0) - (a.rawDate?.toMillis ? a.rawDate.toMillis() : 0));
+
+    // STATS
+    let stats = { reqs: reqsThisWeek, tasks: 0, verifications: 0, changes: 0 };
+    if (!tasksSnap.empty) {
+        tasksSnap.forEach(doc => {
+            const tDate = doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(0);
+            if (tDate > oneWeekAgo) stats.tasks++;
+        });
+    }
+    const verificationsSnap = await db.collection('requirements').where('status', '==', 'Pending Verification').get();
+    stats.verifications = verificationsSnap.size;
+
+    const crSnap = await db.collection('change_requests').where('status', '==', 'Pending').get();
+    stats.changes = crSnap.size;
+
+    return { timeline, clientTimeline, stats };
   }
 }
 

@@ -47,7 +47,7 @@ export default function ClientActionItems() {
               {data.pendingApprovals.length}
             </span>
           </div>
-          {/* THE FIX: Corrected the route from /dashboard/approvals to /client/approvals */}
+          
           <Link to="/client/approvals" className="text-xs md:text-sm font-bold text-primary flex items-center hover:text-blue-700 transition-colors whitespace-nowrap pl-2">
             View All <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1" />
           </Link>
@@ -67,7 +67,7 @@ export default function ClientActionItems() {
                   <p className="text-[13px] md:text-sm font-bold text-navy truncate">{item.title}</p>
                   <p className="text-[11px] md:text-xs text-gray-500 mt-1 truncate">{item.id} · {item.meta}</p>
                 </div>
-                {/* THE FIX: Corrected route and added state to auto-select the project on the next page */}
+                
                 <Link 
                   to="/client/approvals" 
                   state={{ id: item.id }} 
@@ -112,7 +112,7 @@ export default function ClientActionItems() {
                   <p className="text-[11px] md:text-xs text-gray-500 mt-1 truncate">{item.id} · {item.meta}</p>
                   <p className="text-[11px] md:text-xs text-gray-600 italic mt-2 border-l-2 border-red-200 pl-2 line-clamp-2 md:line-clamp-none">{item.quote}</p>
                 </div>
-                {/* THE FIX: Corrected route and added state to auto-select the project */}
+                
                 <Link 
                   to="/client/clarifications" 
                   state={{ id: item.id }} 

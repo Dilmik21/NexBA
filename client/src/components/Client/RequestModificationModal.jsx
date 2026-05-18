@@ -52,7 +52,7 @@ export default function RequestModificationModal({ isOpen, onClose, requirement,
               <AlertTriangle className="w-5 h-5 md:w-6 md:h-6" />
             </div>
             <div>
-              <p className="font-bold text-orange-900 text-xs md:text-sm uppercase tracking-wide">AI Impact Analysis</p>
+              <p className="font-bold text-orange-900 text-xs md:text-sm uppercase tracking-wide">Change Impact Analysis</p>
               <p className="text-[11px] md:text-xs text-orange-700 mt-1.5 leading-relaxed">
                 Changing this requirement may delay the timeline by <span className='font-black'>2 days</span>. Consider discussing with your BA first.
               </p>

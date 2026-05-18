@@ -42,20 +42,20 @@ export default function DevDashboard() {
   };
 
   return (
-    // THE FIX: Removed overflow-hidden and flex-col to allow standard native scrolling!
+   
     <div className="min-h-screen bg-[#F5F7FA]">
       <DevTopBar />
 
       <div className="flex max-w-[1600px] w-full mx-auto pt-6 px-4 md:px-6 gap-8 pb-12">
         
-        {/* THE FIX: The Sidebar Wrapper is now perfectly Sticky just like the Client side! */}
+        
         <div className="hidden lg:block w-[260px] flex-shrink-0">
           <div className="sticky top-[100px] h-[calc(100vh-130px)]">
             <DevSidebar />
           </div>
         </div>
 
-        {/* Main Content Area naturally scrolls down externally */}
+        
         <div className="flex-1 min-w-0">
           
           <div className="mb-6 md:mb-8 flex-shrink-0">

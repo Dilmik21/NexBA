@@ -8,7 +8,7 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 
-// --- CRITICAL FIX: Increased limits to 50MB to allow large file attachments ---
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -16,13 +16,13 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const clientRoutes = require('./routes/clientRoutes');
 const sharedRoutes = require('./routes/sharedRoutes');
 const baRoutes = require('./routes/baRoutes'); 
-const devRoutes = require('./routes/devRoutes'); // <-- NEW: Imported Developer Routes
+const devRoutes = require('./routes/devRoutes'); 
 
 // Mount Routes
 app.use('/api/client', clientRoutes);
 app.use('/api/ai', sharedRoutes);
 app.use('/api/ba', baRoutes); 
-app.use('/api/dev', devRoutes); // <-- NEW: Mounted Developer Routes
+app.use('/api/dev', devRoutes); 
 
 // Start Server
 app.listen(port, () => {

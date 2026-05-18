@@ -2,7 +2,7 @@ const { BARequirementModel, BATaskModel, BAChangeModel, BAVerificationModel, BAC
 const { db } = require('../config/firebase');
 const { sendNotification } = require('../services/notificationService');
 
-// THE FIX: Reverted to the stable version of pdf-parse
+
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 

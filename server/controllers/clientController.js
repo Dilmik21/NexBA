@@ -13,7 +13,7 @@ const submitProject = async (req, res) => {
   try {
     const customReqId = await RequirementModel.submitProject(req.body, req.uid);
 
-    // --- 🚨 NOTIFICATION: Send "Receipt" to Client 🚨 ---
+    
     await sendNotification({
         recipientId: req.uid,
         title: "Project Submitted Successfully",
@@ -125,7 +125,7 @@ const getChatProjects = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- THE FIX: Extract 'channel' from query and pass it to Model ---
+
 const getProjectMessages = async (req, res) => {
   try {
       const channel = req.query.channel || 'Client';
@@ -134,7 +134,7 @@ const getProjectMessages = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- THE FIX: Extract 'channel' from body and pass it to Model + Dynamic Notifications ---
+
 const sendProjectMessage = async (req, res) => {
   try {
       const { text, fileData, senderName, channel } = req.body;
@@ -196,7 +196,7 @@ const sendProjectMessage = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false }); }
 };
 
-// --- THE FIX: Pass channel to mark read ---
+
 const markProjectMessagesRead = async (req, res) => {
   try {
       const channel = req.query.channel || req.body.channel || 'Client';

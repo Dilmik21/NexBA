@@ -34,7 +34,7 @@ export default function ClientSidebar() {
     fetchStats();
   }, []);
 
-  // UPDATED PATHS: Changed from /dashboard to /client to match our new App.jsx routing
+  
   const menuItems = [
     { name: "Overview", path: "/client/overview", icon: LayoutDashboard },
     { name: "My Requests", path: "/client/requests", icon: FileText },
@@ -55,7 +55,7 @@ export default function ClientSidebar() {
             <Link
               key={item.name}
               to={item.path}
-              // UPDATED HOVER CLASSES: hover:bg-blue-50 and hover:text-primary
+             
               className={`flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-200 group ${
                 isActive 
                   ? "bg-blue-50 text-primary font-semibold" 
@@ -63,7 +63,7 @@ export default function ClientSidebar() {
               }`}
             >
               <div className="flex items-center space-x-4">
-                {/* UPDATED ICON HOVER: group-hover:text-primary */}
+                
                 <item.icon className={`w-5 h-5 transition-colors ${
                   isActive ? "text-primary" : "text-gray-400 group-hover:text-primary"
                 }`} />
@@ -91,14 +91,13 @@ export default function ClientSidebar() {
       <div className="p-4 border-t border-gray-50">
         <Link
           to="/client/settings"
-          // UPDATED HOVER CLASSES for Settings as well
           className={`flex items-center px-4 py-3 rounded-2xl transition-all duration-200 group ${
             location.pathname === "/client/settings" 
               ? "bg-blue-50 text-primary font-semibold" 
               : "text-gray-500 hover:bg-blue-50 hover:text-primary font-medium"
           }`}
         >
-          {/* UPDATED ICON HOVER for Settings */}
+          
           <Settings className={`w-5 h-5 mr-4 transition-colors ${
             location.pathname === "/client/settings" ? "text-primary" : "text-gray-400 group-hover:text-primary"
           }`} />

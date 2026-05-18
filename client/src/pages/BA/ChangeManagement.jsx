@@ -282,7 +282,7 @@ export default function ChangeManagement() {
                            </p>
                          </div>
 
-                         {/* THE FIX: Safe Array mapping to prevent React Crash */}
+                         
                          {Array.isArray(selectedCR.aiImpact?.conflicts) && selectedCR.aiImpact.conflicts.length > 0 && (
                            <div className="mt-5">
                               <h5 className="text-[11px] font-bold text-gray-500 mb-3">Linked Tasks Affected:</h5>

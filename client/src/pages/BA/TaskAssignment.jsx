@@ -568,7 +568,7 @@ export default function TaskAssignment() {
                           <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 md:p-4 mb-4 flex items-start">
                              <Sparkles className="w-4 h-4 text-indigo-500 mt-0.5 mr-2 flex-shrink-0" />
                              <div>
-                                <p className="text-[11px] md:text-xs font-bold text-indigo-800">AI Recommendation</p>
+                                <p className="text-[11px] md:text-xs font-bold text-indigo-800">Recommendation</p>
                                 <p className="text-[10px] md:text-[11px] text-indigo-600 mt-0.5">This requirement is best suited for a team specializing in <strong>{selectedReq.projectType}</strong>.</p>
                              </div>
                           </div>

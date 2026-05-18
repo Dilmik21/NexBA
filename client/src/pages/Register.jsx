@@ -37,7 +37,7 @@ export default function Register() {
     "Cybersecurity Development"
   ];
 
-  // Close dropdown if clicked outside
+  
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -81,9 +81,9 @@ export default function Register() {
           setLoading(false);
           return;
         }
-        // Save as a joined string to maintain compatibility with your BA Dashboard
+       
         additionalData.specialty = specialties.join(', ');
-        // Also save the raw array in case you need it for advanced filtering later
+        
         additionalData.specialtiesArray = specialties;
         additionalData.teamName = `${formData.fullName.split(" ")[0]}'s Team`;
       }

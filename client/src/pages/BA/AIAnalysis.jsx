@@ -5,7 +5,7 @@ import BASidebar from "../../components/BA/BASidebar";
 import { useAuth } from "../../contexts/AuthContext";
 import { FileText, Sparkles, X, Loader2, Inbox, RefreshCw, Download, Plus, ChevronDown, Edit3, Save } from "lucide-react";
 
-// --- Crash-Proof Document Viewer Component ---
+
 const DocumentViewer = ({ fileName, fileData }) => {
   const safeName = fileName || "document.pdf";
   const ext = safeName.split('.').pop().toLowerCase();
@@ -65,7 +65,7 @@ const DocumentViewer = ({ fileName, fileData }) => {
   );
 }
 
-// --- THE FIX: Bulletproof Highlighted Text Component ---
+
 const HighlightedText = ({ text, terms }) => {
   if (!text) return <p className="text-gray-500 italic">No original text found in database for this requirement.</p>;
   

@@ -184,13 +184,13 @@ export default function ClientSettings() {
     <div className="min-h-screen bg-[#F5F7FA]">
       <ClientTopBar />
 
-      {/* Added responsive padding px-4 md:px-6 */}
+      
       <div className="flex max-w-[1600px] mx-auto pt-6 px-4 md:px-6 gap-8">
         <div className="hidden lg:block w-64 flex-shrink-0">
           <ClientSidebar />
         </div>
 
-        {/* Removed fixed height constraint for mobile scrolling */}
+        
         <div className="flex-1 pb-10 flex flex-col h-full lg:h-[calc(100vh-100px)]">
           <div className="mb-6 flex-shrink-0">
             <h1 className="text-[22px] md:text-2xl font-bold text-navy">Profile & Settings</h1>

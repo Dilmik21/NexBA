@@ -132,7 +132,7 @@ export default function BAOverview() {
                     </span>
                   )}
                 </div>
-                {/* THE FIX: Reverted to original working route */}
+                
                 <Link to="/ba/inbox" className="text-xs md:text-sm font-bold text-primary flex items-center hover:underline whitespace-nowrap">
                   View All <ArrowRight className="w-3 h-3 md:w-4 md:h-4 ml-1"/>
                 </Link>
@@ -175,7 +175,7 @@ export default function BAOverview() {
                     </span>
                   )}
                 </div>
-                {/* THE FIX: Reverted to original working route */}
+                
                 <Link to="/ba/changes" className="text-xs md:text-sm font-bold text-primary flex items-center hover:underline whitespace-nowrap">
                   Review All <ArrowRight className="w-3 h-3 md:w-4 md:h-4 ml-1"/>
                 </Link>
@@ -211,7 +211,7 @@ export default function BAOverview() {
                   <Users className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
                   <h3 className="font-bold text-navy text-[13px] md:text-base">Developer Load</h3>
                 </div>
-                {/* THE FIX: Reverted to original working route */}
+                
                 <Link to="/ba/tasks" className="text-xs md:text-sm font-bold text-primary flex items-center hover:underline whitespace-nowrap">
                   Assign Tasks <ArrowRight className="w-3 h-3 md:w-4 md:h-4 ml-1"/>
                 </Link>
@@ -247,7 +247,7 @@ export default function BAOverview() {
             <div className="bg-white rounded-2xl md:rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
               <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-50 flex justify-between items-center flex-shrink-0">
                 <h3 className="font-bold text-navy text-[13px] md:text-base">My Verification Queue</h3>
-                {/* THE FIX: Reverted to original working route */}
+                
                 <Link to="/ba/verification" className="text-xs md:text-sm font-bold text-primary flex items-center hover:underline whitespace-nowrap">
                   View All <ArrowRight className="w-3 h-3 md:w-4 md:h-4 ml-1"/>
                 </Link>
@@ -277,21 +277,21 @@ export default function BAOverview() {
               <Link to="/ba/analysis" className="bg-white border border-gray-200 hover:border-primary hover:text-primary hover:bg-blue-50 transition-all text-gray-600 font-semibold p-4 rounded-xl md:rounded-2xl flex items-center text-[13px] md:text-sm shadow-sm">
                 <Activity className="w-4 h-4 md:w-5 md:h-5 mr-3 text-blue-500" /> AI Workspace
               </Link>
-              {/* THE FIX: Reverted to original working route */}
+              
               <Link to="/ba/tasks" className="bg-white border border-gray-200 hover:border-primary hover:text-primary hover:bg-blue-50 transition-all text-gray-600 font-semibold p-4 rounded-xl md:rounded-2xl flex items-center text-[13px] md:text-sm shadow-sm">
                 <Briefcase className="w-4 h-4 md:w-5 md:h-5 mr-3 text-purple-500" /> Assign Tasks
               </Link>
               <Link to="/ba/communication" className="bg-white border border-gray-200 hover:border-primary hover:text-primary hover:bg-blue-50 transition-all text-gray-600 font-semibold p-4 rounded-xl md:rounded-2xl flex items-center text-[13px] md:text-sm shadow-sm">
                 <MessageSquare className="w-4 h-4 md:w-5 md:h-5 mr-3 text-green-500" /> Comms Hub
               </Link>
-              {/* THE FIX: Reverted to original working route, kept 'Reports' label */}
+             
               <Link to="/ba/reports" className="bg-white border border-gray-200 hover:border-primary hover:text-primary hover:bg-blue-50 transition-all text-gray-600 font-semibold p-4 rounded-xl md:rounded-2xl flex items-center text-[13px] md:text-sm shadow-sm">
                 <ClipboardCheck className="w-4 h-4 md:w-5 md:h-5 mr-3 text-orange-500" /> Reports
               </Link>
             </div>
           </div>
 
-          {/* EXACT DEVELOPER PROGRESS TRACKER */}
+          {/* DEVELOPER PROGRESS TRACKER */}
           <div className="bg-white rounded-[20px] md:rounded-[24px] border border-gray-100 shadow-sm mb-6 md:mb-8 overflow-hidden">
             <div className="px-5 md:px-6 py-4 md:py-5 border-b border-gray-50 flex justify-between items-center">
               <h3 className="font-bold text-navy text-[15px] md:text-[16px] flex items-center">

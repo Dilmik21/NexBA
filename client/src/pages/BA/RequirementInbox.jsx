@@ -174,7 +174,7 @@ export default function RequirementInbox() {
           <BASidebar />
         </div>
 
-        {/* FIXED: Removed fixed height constraint when in Cards view so the page scrolls externally */}
+        
         <div className={`flex-1 pb-10 flex flex-col ${viewMode === 'list' && requirements.length > 0 ? 'h-[calc(100vh-100px)]' : 'min-h-[calc(100vh-100px)]'}`}>
           
           {/* HEADER & TOGGLE */}
@@ -213,7 +213,7 @@ export default function RequirementInbox() {
             </div>
           ) : viewMode === "cards" ? (
             
-            /* CARDS VIEW - No more internal scrolling! */
+            
             <div className="flex-1 pb-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {requirements.map((req) => (

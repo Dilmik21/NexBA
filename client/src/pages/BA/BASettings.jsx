@@ -11,7 +11,7 @@ export default function BASettings() {
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
 
-  // --- INSTANT LOAD FIX: Pre-fill with known data immediately ---
+  
   const [profileData, setProfileData] = useState({
     fullName: currentUser?.displayName || "",
     email: currentUser?.email || "",

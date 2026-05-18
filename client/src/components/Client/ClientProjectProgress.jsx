@@ -61,7 +61,7 @@ export default function ClientProjectProgress() {
   const getStageDetails = (stage) => {
     const s = stage?.toLowerCase() || "";
     
-    // UPDATED: Changed displayStage from "Initiated" to "Pending BA Review"
+
     if (s === "pending ba review") return { badgeBg: "bg-gray-100", badgeText: "text-gray-600", barColor: "bg-gray-400", progress: 10, displayStage: "Pending BA Review" };
     if (s.includes("analysis")) return { badgeBg: "bg-yellow-100", badgeText: "text-yellow-700", barColor: "bg-yellow-500", progress: 20, displayStage: "Analysis" };
     if (s.includes("clarification")) return { badgeBg: "bg-red-100", badgeText: "text-red-600", barColor: "bg-red-500", progress: 20, displayStage: "Paused: Client Input" };

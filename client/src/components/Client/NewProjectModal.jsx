@@ -28,7 +28,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
   
   const canContinue = (step === 1 && isStep1Valid) || (step === 2 && isStep2Valid);
 
-  // FIXED: Now properly converts the file into Base64 data so the database can store the actual document!
+  
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -87,7 +87,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
-    // FIXED: Now includes fileData in the payload
+    
     const finalPayload = {
       ...formData,
       type: uploadedFile ? 'document' : 'text',

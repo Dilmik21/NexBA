@@ -64,7 +64,7 @@ export default function ClientDashboard() {
             </button>
           </div>
           
-          {/* Note: Ensure the individual components below also use standard Tailwind responsive classes (like grid-cols-1 md:grid-cols-2) in their own files! */}
+         
           <div className="space-y-6 md:space-y-8">
             <ClientOverviewCards />
             <ClientProjectProgress />

@@ -124,7 +124,7 @@ export default function MyRequests() {
   });
 
   return (
-    /* h-screen locks the page from scrolling internally. overflow-y-scroll forces the dummy external track so sizes align. */
+    
     <div className="h-screen bg-[#F5F7FA] overflow-y-scroll flex flex-col">
       <NewProjectModal 
         isOpen={isModalOpen} 
@@ -203,7 +203,7 @@ export default function MyRequests() {
           </div>
 
           <div className="bg-white rounded-3xl md:rounded-[2rem] border border-gray-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col flex-1 min-h-0 overflow-hidden">
-            {/* Native internal scrollbar automatically enabled with overflow-y-auto (NO CUSTOM CSS) */}
+            
             <div className="overflow-y-auto flex-1 w-full pr-1">
               <table className="w-full text-left border-collapse relative">
                 <thead className="sticky top-0 bg-white z-10 border-b border-gray-100">
@@ -279,7 +279,7 @@ export default function MyRequests() {
               </button>
             </div>
             
-            {/* Native scrollbar handles scrolling perfectly */}
+           
             <div className="p-6 md:p-8 overflow-y-auto bg-[#FAFAFA] rounded-b-3xl pr-4">
               
               {viewingDocument ? (

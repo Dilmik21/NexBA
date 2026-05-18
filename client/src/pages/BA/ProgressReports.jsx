@@ -230,7 +230,7 @@ export default function ProgressReports() {
                               </span>
                             </div>
 
-                            {/* THE FIX: Quick Update button has been successfully removed */}
+                            
 
                           </div>
                         </div>

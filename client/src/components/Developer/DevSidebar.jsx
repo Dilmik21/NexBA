@@ -22,7 +22,7 @@ export default function DevSidebar() {
         .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
       `}</style>
       
-      {/* THE FIX: h-full ensures the sidebar fills out the sticky container perfectly! */}
+     
       <div className="w-full bg-white rounded-[24px] shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
         
         <div className="flex-1 py-6 px-4 space-y-1.5 overflow-y-auto sidebar-scroll">

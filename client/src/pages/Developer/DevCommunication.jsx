@@ -199,7 +199,7 @@ export default function DevCommunication() {
   }
 
   return (
-    // overflow-y-scroll locks the page height while keeping the dummy external scrollbar visible
+   
     <div className="h-screen bg-[#F5F7FA] overflow-y-scroll flex flex-col">
       <DevTopBar />
 
@@ -234,7 +234,7 @@ export default function DevCommunication() {
                 </div>
               </div>
 
-              {/* Native scrollbar restored automatically by using standard overflow-y-auto */}
+              
               <div className="flex-1 overflow-y-auto p-4 space-y-2 pr-2">
                 {filteredChats.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-8">
@@ -404,7 +404,7 @@ export default function DevCommunication() {
                     )}
                   </div>
 
-                  {/* Native scrollbar automatically appears with overflow-y-auto (NO CUSTOM WEBKIT CSS) */}
+                  
                   <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-[#F8FAFC] pr-2">
                     {messages.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-gray-400 py-10">

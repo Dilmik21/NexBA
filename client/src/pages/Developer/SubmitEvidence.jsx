@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import DevTopBar from "../../components/Developer/DevTopBar";
 import DevSidebar from "../../components/Developer/DevSidebar";
 import { useAuth } from "../../contexts/AuthContext";
-// THE FIX: Added ExternalLink and Download to the imports!
 import { Loader2, Search, AlertTriangle, Link as LinkIcon, FileText, UploadCloud, CheckCircle2, X, Info, Clock, ArrowLeft, ExternalLink, Download } from "lucide-react";
 
 export default function SubmitEvidence() {

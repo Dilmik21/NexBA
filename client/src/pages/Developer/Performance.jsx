@@ -137,7 +137,7 @@ export default function Performance() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
-            {/* --- RESTORED: THICK BAR CHART DESIGN WITH LEGEND --- */}
+            
             <div className="bg-white rounded-[24px] p-7 md:p-8 border border-gray-100 shadow-sm flex flex-col">
               <div className="mb-10">
                 <h3 className="font-bold text-navy text-[18px]">Weekly Completion</h3>
@@ -194,7 +194,7 @@ export default function Performance() {
                 )}
               </div>
 
-              {/* RESTORED: Legend at the bottom */}
+              
               <div className="flex items-center gap-6 mt-10 pt-6 border-t border-gray-100">
                 <div className="flex items-center gap-2.5">
                   <div className="w-3.5 h-3.5 rounded-sm bg-[#10B981] shadow-sm"></div>
@@ -213,7 +213,7 @@ export default function Performance() {
                 <p className="text-[13px] text-gray-400 font-medium mt-1">Tasks submitted for review</p>
               </div>
 
-              {/* CHANGED: Removed custom-scrollbar class so it uses the native browser scrollbar */}
+             
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {recentCompletions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full py-10 text-center">

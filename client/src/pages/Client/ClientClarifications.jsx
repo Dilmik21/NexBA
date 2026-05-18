@@ -47,7 +47,7 @@ export default function ClientClarifications() {
     }
   };
 
-  // --- FIXED: PERFECTLY CLEARS WORK WHEN SWITCHING QUESTIONS ---
+  
   const handleSelect = (q) => {
     setSelectedQuestion(q);
     setAnswerText(""); 
@@ -74,7 +74,7 @@ export default function ClientClarifications() {
     }
   };
 
-  // --- FIXED: PERFECTLY CLEARS WORK AFTER SUBMISSION ---
+  
   const handleSendAnswer = async () => {
     if (!answerText.trim() || !selectedQuestion) return;
     

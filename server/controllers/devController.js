@@ -100,7 +100,7 @@ const getChatList = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-// --- NEW: Gets the channel query to pull the correct chat tab ---
+
 const getMessages = async (req, res) => {
   try {
     const channel = req.query.channel || 'BA'; 
@@ -109,7 +109,7 @@ const getMessages = async (req, res) => {
   } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-// --- NEW: Forwards the body to the Model which now handles the 'channel' property ---
+
 const sendMessage = async (req, res) => {
   try {
     const result = await DevDashboardModel.sendMessage(req.body);

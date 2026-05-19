@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const clientController = require('../controllers/clientController');
 
-// Ensure the middleware is applied to ALL routes
+
 const auth = clientController.requireUid;
 
 // Projects & Dashboard
@@ -17,7 +17,6 @@ router.get('/requests', auth, clientController.getAllRequests);
 
 // Clarifications
 router.get('/clarifications', auth, clientController.getClarifications);
-// 🚨 FIXED: Now correctly points to the Client Controller! 🚨
 router.post('/clarifications/:id/answer', auth, clientController.answerClarification);
 
 // Communication Hub
